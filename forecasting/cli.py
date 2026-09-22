@@ -72,7 +72,11 @@ def cmd_run(config_path: Path, force: bool = False, out=None) -> int:
         _print_validation(validated, out, reports=False)
         print("\nvalidation failed; nothing was run", file=out)
         return 1
-    result = run(cfg, validated, force=force)
+    try:
+        result = run(cfg, validated, force=force)
+    except ConfigError as e:
+        print(f"gate error: {e}", file=out)
+        return 2
     man = result.manifest
     if result.existed:
         print(
@@ -100,12 +104,21 @@ def cmd_run(config_path: Path, force: bool = False, out=None) -> int:
     )
     print(f"store: {result.path / 'forecasts.parquet'}", file=out)
     print(f"report: {report_run(result.path)}", file=out)
-    if not man["gate"]["present"]:
+    gate = man["gate"]
+    if not gate["present"]:
         print(
             "note: no gate.yaml next to the config. Treat this run as exploratory and do not "
             "study test-origin results on real data before P1 (commit gate.yaml first).",
             file=out,
         )
+    elif not gate.get("committed"):
+        print(
+            "note: gate.yaml has uncommitted changes. P1 needs it committed before the run; "
+            "the report will not issue a gate decision for this run.",
+            file=out,
+        )
+    else:
+        print(f"gate.yaml: sha256 {gate['sha256'][:12]}, commit {gate['commit'][:12]}", file=out)
     return 0
 
 

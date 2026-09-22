@@ -10,7 +10,7 @@ import yaml
 
 from forecasting.backtest.store import ForecastStore, content_hash
 from forecasting.cli import cmd_run, cmd_validate, main
-from tests.conftest import pin_baselines
+from tests.conftest import pin_baselines, write_gate
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -117,13 +117,24 @@ def test_run_force_reproduces_the_store(tmp_path: Path):
 
 def test_run_records_gate_yaml(tmp_path: Path):
     cfg_path = example_copy(tmp_path, small=True)
-    (cfg_path.parent / "gate.yaml").write_text("thresholds: {}\n")
+    write_gate(cfg_path)
     out = io.StringIO()
     assert cmd_run(cfg_path, out=out) == 0
     assert "no gate.yaml" not in out.getvalue()
+    assert "uncommitted" in out.getvalue()  # tmp_path is not a git repository
     [run_dir] = list((cfg_path.parent / "runs").iterdir())
     gate = json.loads((run_dir / "manifest.json").read_text())["gate"]
-    assert gate["present"] and len(gate["sha256"]) == 64
+    assert gate["present"] and len(gate["sha256"]) == 64 and gate["committed"] is False
+    assert "No gate decision" in (run_dir / "report" / "report.md").read_text()
+
+
+def test_run_refuses_a_gate_that_does_not_match_the_config(tmp_path: Path):
+    cfg_path = example_copy(tmp_path, small=True)
+    write_gate(cfg_path, primary_window="rolling", alpha=0.5)
+    out = io.StringIO()
+    assert cmd_run(cfg_path, out=out) == 2
+    assert "gate.yaml" in out.getvalue()
+    assert not (cfg_path.parent / "runs").exists()
 
 
 def test_run_refuses_invalid_data(tmp_path: Path):

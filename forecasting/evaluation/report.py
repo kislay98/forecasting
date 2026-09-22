@@ -10,7 +10,9 @@ Choices the report makes (DECISIONS.md, M6):
 - When a question needs one model (h*, calibration, residuals), the report speaks for
   the dev-chosen best candidate (selection.select_best_candidate), never a model picked
   on test results. Calibration uses the best candidate with intervals.
-- The Phase 1 exit decision is provisional until gate.yaml enforcement (M8).
+- The Phase 1 exit decision is provisional unless gate.yaml (P1) was committed before
+  the run and is unchanged since; then the report issues the A10 gate decision with the
+  gate's thresholds (M8).
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from forecasting.backtest.store import ForecastStore
 from forecasting.evaluation.metrics import BUCKET_NAMES
 from forecasting.evaluation.scoring import Scores, SeriesLabels, pairwise, score, series_labels
 from forecasting.evaluation.tests import MIN_N_EFF_DM
+from forecasting.gate import Gate, current_sha, load_gate
 
 ALPHA = 0.05  # significance for RQ1, RQ3 (Kupiec) and RQ5
 LEAKAGE_GAIN = 0.30  # exit table: gains above 30% over ETS call for a leakage audit
@@ -81,6 +84,9 @@ class SeriesReport:
     exit: Verdict
     markdown: str
     figures: dict[str, Figure] = field(default_factory=dict)
+    h_star: int | None = None
+    interval_model: str | None = None
+    gate: Verdict | None = None  # A10, only with a valid pre-registration
 
 
 @dataclass
@@ -217,15 +223,45 @@ def rq1(point: pd.DataFrame, lab: SeriesLabels, ref: str | None) -> tuple[Verdic
     )
 
 
+def gate_state(manifest: dict[str, Any]) -> tuple[Gate | None, str]:
+    """(gate, why) for a manifest: the loaded gate when the run can carry a gate decision,
+    else None and the reason. P1: gate.yaml must have been committed before the run and
+    must be unchanged since (its sha256 is recorded in the manifest)."""
+    g = manifest.get("gate", {})
+    if not g.get("present"):
+        return None, "no gate.yaml: exploratory run, not a gate decision"
+    if not g.get("committed"):
+        return None, "gate.yaml had uncommitted changes at run time (P1): no gate decision"
+    now = current_sha(g["path"])
+    if now is None:
+        return None, "gate.yaml is missing now: no gate decision"
+    if now != g.get("sha256"):
+        return None, "gate.yaml changed after this run (P1): no gate decision; rerun"
+    try:
+        return load_gate(
+            g["path"]
+        ), f"gate.yaml {g['sha256'][:12]}, commit {g.get('commit', '')[:12]}"
+    except Exception as e:
+        return None, f"gate.yaml does not load: {e}"
+
+
 def exit_decision(
-    point: pd.DataFrame, lab: SeriesLabels, v1: Verdict, h_star: int | None, gate: dict
+    point: pd.DataFrame,
+    lab: SeriesLabels,
+    v1: Verdict,
+    h_star: int | None,
+    gate: dict,
+    leak_gain: float = LEAKAGE_GAIN,
+    status: str | None = None,
+    label: str = "Provisional",
 ) -> Verdict:
     """The Phase 1 exit table (spec), applied to the primary window's test horizons."""
-    status = (
-        f"gate.yaml present (sha256 {gate.get('sha256', '')[:12]}); enforcing it is M8"
-        if gate.get("present")
-        else "no gate.yaml: exploratory run, not a gate decision"
-    )
+    if status is None:
+        status = (
+            f"gate.yaml present (sha256 {gate.get('sha256', '')[:12]})"
+            if gate.get("present")
+            else "no gate.yaml: exploratory run, not a gate decision"
+        )
     th = list(lab.test_horizons)
     t = point[point["h"].isin(th)]
     cand = t[~t["model"].map(is_baseline)]
@@ -241,7 +277,7 @@ def exit_decision(
         base, others, base_name = None, cand.iloc[0:0], ""
     if base is not None and len(others):
         ratio = others["mae"].to_numpy() / base.reindex(others["h"]).to_numpy()
-        if np.nanmin(ratio) < 1 - LEAKAGE_GAIN:
+        if np.nanmin(ratio) < 1 - leak_gain:
             i = int(np.nanargmin(ratio))
             row = others.iloc[i]
             return Verdict(
@@ -249,10 +285,10 @@ def exit_decision(
                 "leakage audit",
                 f"Leakage audit before anything else: {row['model']} is "
                 f"{fmt(100 * (1 - ratio[i]), 0)}% better than {base_name} at h = {int(row['h'])} "
-                f"(threshold {fmt(100 * LEAKAGE_GAIN, 0)}%). Provisional ({status}).",
+                f"(threshold {fmt(100 * leak_gain, 0)}%). {label} ({status}).",
             )
     if v1.answer == "yes":
-        return Verdict("exit", "proceed", f"Proceed to Phase 2. Provisional ({status}).")
+        return Verdict("exit", "proceed", f"Proceed to Phase 2. {label} ({status}).")
     if v1.answer == "partly":
         hs = f"h <= h* = {h_star} (RQ2)" if h_star is not None else "the horizons where it wins"
         return Verdict(
@@ -260,16 +296,16 @@ def exit_decision(
             "proceed, restricted",
             f"Proceed, but restrict Phase 2 to {hs}; longer horizons become scenario "
             f"outputs. RQ1 finds significant wins only at some test horizons, so treat the "
-            f"others with caution. Provisional ({status}).",
+            f"others with caution. {label} ({status}).",
         )
     if v1.answer in ("no", "not testable"):
         return Verdict(
             "exit",
             "stop modelling",
             "Stop modelling: ship naive plus empirical error quantiles (Phase 2 lite) and look "
-            f"for covariates or a panel before further work. Provisional ({status}).",
+            f"for covariates or a panel before further work. {label} ({status}).",
         )
-    return Verdict("exit", "no decision", f"No decision: RQ1 was not tested. ({status}).")
+    return Verdict("exit", "no decision", f"No decision: RQ1 was not tested ({status}).")
 
 
 def rq2(
@@ -454,6 +490,109 @@ def rq6(tr: pd.DataFrame, mode: str) -> Verdict:
     )
 
 
+A10_ANSWER = {
+    "proceed": "GO",
+    "proceed, restricted": "GO, restricted",
+    "stop modelling": "NO-GO",
+    "leakage audit": "AUDIT FIRST",
+    "no decision": "NO DECISION",
+}
+
+
+def gate_criteria(
+    gate: Gate,
+    ex: Verdict,
+    v1: Verdict,
+    point: pd.DataFrame,
+    ib: pd.DataFrame,
+    sub: pd.DataFrame,
+    lab: SeriesLabels,
+    candidate: str | None,
+    interval_model: str | None,
+    h_star: int | None,
+) -> tuple[Verdict, list[dict]]:
+    """A10: the exit table's row, with the research 8.5 criteria the gate registers
+    (1 accuracy up to h* and significance at the decision horizons, 3 calibration within
+    the registered tolerances, 5 stability across sub-periods) checked for the dev-chosen
+    candidate. The decision follows the exit table; the criteria say why."""
+    th = gate.thresholds
+    rows: list[dict] = []
+    # 1 accuracy
+    if candidate is None or h_star is None:
+        rows.append({"criterion": "1 accuracy", "result": "n/a", "detail": "no candidate"})
+    else:
+        c = point[(point["model"] == candidate) & (point["h"] <= max(h_star, 1))]
+        below = bool((c["rel_mae"] < th["relative_mae_below"]).all()) and h_star >= 1
+        rows.append(
+            {
+                "criterion": "1 accuracy",
+                "result": "pass"
+                if below and v1.answer == "yes"
+                else "partial"
+                if below or v1.answer in ("yes", "partly")
+                else "fail",
+                "detail": f"{candidate}: relative MAE below {th['relative_mae_below']} at every h <= h* = {h_star}: "
+                f"{'yes' if below else 'no'}; RQ1 {v1.answer}",
+            }
+        )
+    # 3 calibration
+    if interval_model is None or ib.empty or interval_model not in set(ib["model"]):
+        rows.append({"criterion": "3 calibration", "result": "n/a", "detail": "no intervals"})
+    else:
+        b = ib[(ib["model"] == interval_model) & (np.floor(ib["n_eff"]) >= INFORMATIVE_N)]
+        if b.empty:
+            rows.append(
+                {
+                    "criterion": "3 calibration",
+                    "result": "not judged",
+                    "detail": f"no bucket with {INFORMATIVE_N} effective trials",
+                }
+            )
+        else:
+            tol = {0.8: th["coverage_80"], 0.95: th["coverage_95"]}
+            misses = [
+                f"{r.bucket} {fmt(100 * r.level, 0)}%: {fmt(100 * r.coverage, 0)}%"
+                for r in b.itertuples()
+                if round(r.level, 2) in tol
+                and not (tol[round(r.level, 2)][0] <= r.coverage <= tol[round(r.level, 2)][1])
+            ]
+            rows.append(
+                {
+                    "criterion": "3 calibration",
+                    "result": "pass" if not misses else "fail",
+                    "detail": f"{interval_model}: judged buckets inside "
+                    f"{th['coverage_80']} (80%) and {th['coverage_95']} (95%)"
+                    + (f"; outside: {'; '.join(misses)}" if misses else ""),
+                }
+            )
+    # 5 stability
+    if candidate is None or sub.empty or candidate not in set(sub["model"]):
+        rows.append({"criterion": "5 stability", "result": "n/a", "detail": "no sub-periods"})
+    else:
+        w = sub[sub["model"] == candidate].assign(win=lambda d: d["rel_mae"] < 1)
+        wins = w.groupby("h")["win"].sum()
+        ok = bool((wins >= th["subperiods_min"]).all())
+        rows.append(
+            {
+                "criterion": "5 stability",
+                "result": "pass" if ok else "fail",
+                "detail": f"{candidate} beats the reference in "
+                + "; ".join(
+                    f"{int(v)} of {int(w[w['h'] == h].shape[0])} blocks at h = {h}"
+                    for h, v in wins.items()
+                )
+                + f" (needs {th['subperiods_min']})",
+            }
+        )
+    answer = A10_ANSWER.get(ex.answer, ex.answer)
+    text = (
+        f"{answer}: {ex.text} Criteria: "
+        + "; ".join(f"{r['criterion']} {r['result']}" for r in rows)
+        + "."
+    )
+    return Verdict("A10", answer, text), rows
+
+
 # ---------------------------------------------------------------- plots
 
 
@@ -617,11 +756,13 @@ def _series_report(
     lab: SeriesLabels,
     scfg: dict,
     cand_sel: dict,
+    gate: Gate | None = None,
+    gate_why: str = "",
 ) -> SeriesReport:
     uid = lab.uid
     plan = manifest.get("plans", {}).get(uid, {})
     windows = plan.get("windows") or sorted(set(_of(scores.point, uid)["window"]))
-    w = primary_window(windows)
+    w = gate.primary_window if gate and gate.primary_window in windows else primary_window(windows)
     other = [x for x in windows if x != w]
     point = _of(scores.point, uid, w)
     sel = _of(scores.selections, uid, w)
@@ -643,7 +784,32 @@ def _series_report(
     v4 = rq4(res_w, res_model, lab.target)
     v5 = rq5(_of(scores.window_gap, uid), _of(scores.subperiods, uid, w), cand, ref)
     v6 = rq6(_of(scores.transforms, uid, w), scfg.get("transform", "auto"))
-    ex = exit_decision(point, lab, v1, hstar, manifest.get("gate", {}))
+    if gate is not None:
+        ex = exit_decision(
+            point,
+            lab,
+            v1,
+            hstar,
+            manifest.get("gate", {}),
+            leak_gain=gate.thresholds["leakage_gain_over_ets"],
+            status=gate_why,
+            label="Registered",
+        )
+        a10, _ = gate_criteria(
+            gate,
+            ex,
+            v1,
+            point,
+            _of(scores.interval_buckets, uid, w),
+            _of(scores.subperiods, uid, w),
+            lab,
+            cand,
+            iv_model,
+            hstar,
+        )
+    else:
+        ex = exit_decision(point, lab, v1, hstar, manifest.get("gate", {}), status=gate_why or None)
+        a10 = None
     verdicts = [v1, v2, v3, v4, v5, v6]
 
     md: list[str] = [f"## {uid}", ""]
@@ -920,7 +1086,19 @@ def _series_report(
             ),
             "",
         ]
-    return SeriesReport(uid, w, ref, cand, verdicts, ex, "\n".join(md), figures)
+    return SeriesReport(
+        uid,
+        w,
+        ref,
+        cand,
+        verdicts,
+        ex,
+        "\n".join(md),
+        figures,
+        h_star=hstar,
+        interval_model=iv_model,
+        gate=a10,
+    )
 
 
 def build_report(
@@ -933,8 +1111,11 @@ def build_report(
     scfgs = {s["id"]: s for s in cfg["series"]}
     cand_sel = candidate_choice(manifest, frame)
     present = set(scores.point["unique_id"]) if len(scores.point) else set()
+    gate_obj, gate_why = gate_state(manifest)
     series = [
-        _series_report(scores, frame, manifest, labels[uid], scfgs[uid], cand_sel)
+        _series_report(
+            scores, frame, manifest, labels[uid], scfgs[uid], cand_sel, gate_obj, gate_why
+        )
         for uid in labels
         if uid in present
     ]
@@ -958,7 +1139,7 @@ def build_report(
         "Only test origins are scored; the SMA window, the reference baseline and the best "
         "candidate were chosen on dev origins. Leakage tests L1, L2, L4 and L5 run in CI on "
         f"every push: check that CI passed for commit {manifest.get('git', '?')[:12]}. "
-        "L3 (the random-walk canary) arrives in M7.",
+        "L3 (the random-walk canary) is tests/test_canary.py.",
         "",
         "Limitations: data revisions are not handled (vintages, leakage source 16). "
         "Multi-step errors from overlapping windows are correlated, so n / h is printed next "
@@ -971,7 +1152,25 @@ def build_report(
         head.append(
             f"| {s.uid} | " + " | ".join(v.answer for v in s.verdicts) + f" | {s.exit.answer} |"
         )
-    head.append("")
+    head += ["", "## Gate decision (A10)", ""]
+    if gate_obj is None:
+        head += [f"**No gate decision: {gate_why}.**", ""]
+    else:
+        th = gate_obj.thresholds
+        head += [
+            f"Pre-registered {gate_obj.registered} ({gate_why}); alpha {gate_obj.alpha}, primary "
+            f"window {gate_obj.primary_window}; thresholds: relative MAE below "
+            f"{th['relative_mae_below']} up to h*, 80% coverage in {th['coverage_80']}, 95% in "
+            f"{th['coverage_95']}, at least {th['subperiods_min']} of 4 sub-periods, leakage "
+            f"audit above {fmt(100 * th['leakage_gain_over_ets'], 0)}% over ETS.",
+            "",
+            "| Series | Decision | Registered expectation | Detail |",
+            "|---|---|---|---|",
+        ]
+        for s in series:
+            exp = gate_obj.series.get(s.uid).expectation if s.uid in gate_obj.series else ""
+            head.append(f"| {s.uid} | {s.gate.answer} | {exp} | {s.gate.text} |")
+        head.append("")
     body = "\n\n".join(s.markdown for s in series)
     return Report(run_id=rid, markdown="\n".join(head) + "\n" + body + "\n", series=series)
 

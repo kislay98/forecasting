@@ -29,6 +29,7 @@ from forecasting.config import RunConfig, SeriesConfig, git_sha, run_id
 from forecasting.data.adapters import Fetcher, load_series
 from forecasting.data.validate import Series, ValidationReport, validate
 from forecasting.errors import DataValidationError
+from forecasting.gate import gate_status as gate_status_for
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 
@@ -63,15 +64,8 @@ def compute_run_id(cfg: RunConfig, series: list[Series]) -> tuple[str, str]:
 
 
 def gate_status(cfg: RunConfig) -> dict[str, Any]:
-    """P1: gate.yaml next to the config must exist before results on test origins matter."""
-    path = cfg.base_dir / "gate.yaml"
-    if not path.exists():
-        return {"path": str(path), "present": False}
-    return {
-        "path": str(path),
-        "present": True,
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    }
+    """P1: what the manifest records about gate.yaml (forecasting/gate.py)."""
+    return gate_status_for(cfg)
 
 
 @dataclass
@@ -92,6 +86,7 @@ def run(cfg: RunConfig, validated: Validated, force: bool = False) -> RunResult:
     if validated.failed:
         raise ValueError("cannot run: some series failed validation")
     series = [s for _, s, _ in validated.ok]
+    gate = gate_status(cfg)  # P1: a gate that fails to load or match the config stops here
     rid, git = compute_run_id(cfg, series)
     out_dir = cfg.output_path / rid
     manifest_path = out_dir / "manifest.json"
@@ -116,7 +111,7 @@ def run(cfg: RunConfig, validated: Validated, force: bool = False) -> RunResult:
         run_id=rid,
         git=git,
         data_hashes={s.unique_id: s.data_hash for s in series},
-        gate=gate_status(cfg),
+        gate=gate,
         warnings=sorted({w for _, _, r in validated.ok for w in r.warnings}),
     )
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

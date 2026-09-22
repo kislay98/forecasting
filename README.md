@@ -123,6 +123,17 @@ s.intervals, s.interval_buckets  # coverage with binomial band, Kupiec, Winkler
 s.residuals, s.window_gap, s.subperiods, s.transforms  # RQ4 to RQ6
 ```
 
+## The gate (P1)
+
+`gate.yaml` next to the run config is the pre-registration: decision horizons and model
+list per series, the primary window, alpha and the thresholds (relative MAE below 1 up
+to h*, coverage tolerances per bucket, sub-periods, the leakage-audit gain). It must be
+committed before the first run that scores test origins on real data. `forecast run`
+refuses a gate that does not match the config, records the gate's sha256 and git commit
+in the manifest, and the report issues the A10 decision (GO, GO restricted, NO-GO, AUDIT
+FIRST) only when the file was committed before the run and is unchanged since. Without
+that, every exit decision stays provisional. `configs/gate.yaml` is the Phase 1 gate.
+
 ## Data rules
 
 Validation never changes a value. It refuses data it cannot evaluate honestly.
@@ -200,6 +211,7 @@ forecasting/
   evaluation/scoring.py  score / score_run: tidy per-horizon tables from a run
   evaluation/diagnostics.py  Ljung-Box, ARCH-LM, window gap, sub-periods, transforms
   evaluation/report.py  RQ1-RQ6 verdicts, exit decision, tables, 3 plots, markdown
+  gate.py             gate.yaml: load, match the config, committed status (P1)
   pipeline.py         validate all, run, manifest
   cli.py              forecast validate | run | report
 tests/
