@@ -19,7 +19,7 @@ Needs [uv](https://docs.astral.sh/uv/). uv installs Python 3.11 if you lack it.
 ```bash
 uv sync                                        # create .venv and install
 uv run forecast validate examples/config.yaml  # validate the example series
-uv run forecast run examples/config.yaml       # backtest the baselines, write the store
+uv run forecast run examples/config.yaml       # backtest every model, write the store
 uv run pytest                                  # all tests (CI runs these)
 uv run pytest -m "not slow"                    # quick loop, about 30 s
 uv run ruff check . && uv run ruff format --check .
@@ -87,6 +87,24 @@ series (m > 24) ets and sarima run on an STL-adjusted series. Statistical models
 warm-up origins unless `warmup_models: all`; `sarima_search: grid` fits the full SARIMA
 grid instead of the stepwise search.
 
+## Scoring a run
+
+Metrics and tests are computed from the store and manifest, never by refitting (M5).
+The report and a CLI command arrive in M6; until then, from Python:
+
+```python
+from forecasting.evaluation.scoring import score_run
+
+s = score_run("examples/runs/<run_id>")
+s.point  # per series, window, model, h: MAE, MASE, relative MAE, DM-HLN, Holm, MCS
+s.skill  # SS(h) = 1 - relative MAE with its block-bootstrap CI
+s.h_star  # predictable horizon per model
+s.intervals  # coverage with binomial band, Kupiec, Winkler (per h; interval_buckets per bucket)
+```
+
+Only test origins with status ok and a present actual are scored. "sma" is the
+dev-chosen window and the reference is the dev-chosen best baseline.
+
 ## Data rules
 
 Validation never changes a value. It refuses data it cannot evaluate honestly.
@@ -118,7 +136,7 @@ Each rule has a bad fixture in `tests/fixtures/` (regenerate with
 | L1 future poisoning | Replacing every value after an origin (1e9, NaN, a permutation) leaves all forecasts, intervals and fold facts unchanged |
 | L2 planted leaks | A model that peeks at the next value, and a transform fitted on the whole series, are both caught by L1, and only they are |
 | L4 alignment | Origins, targets and periods line up exactly, including trading-day closures and returns across them |
-| L5 test quarantine | SMA-window and best-baseline choices are identical when every test row is poisoned |
+| L5 test quarantine | SMA-window and best-baseline choices are identical when every test row is poisoned; every score table is identical when every dev and warm-up row is poisoned (tests/test_scoring.py) |
 
 The harness in `tests/leakage.py` is reused for every new model.
 
@@ -139,6 +157,10 @@ forecasting/
   backtest/engine.py  run_backtest: the only code that slices data
   backtest/store.py   ForecastStore (Parquet) and content hash
   backtest/selection.py  SMA window chosen on dev origins
+  evaluation/metrics.py  MAE, RMSE, MASE, relative MAE, WAPE, sMAPE, MAPE, bias,
+                      coverage and band, Winkler, directional accuracy, OOS R^2, buckets
+  evaluation/tests.py DM-HLN, Holm, Kupiec, Pesaran-Timmermann, MCS, skill bootstrap, h*
+  evaluation/scoring.py  score / score_run: tidy per-horizon tables from a run
   pipeline.py         validate all, run, manifest
   cli.py              forecast validate | run
 tests/
