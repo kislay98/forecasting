@@ -11,6 +11,7 @@ dependencies = [
     "pyarrow>=15",
     "pyyaml>=6.0",
     "scipy>=1.11",
+    "statsmodels>=0.14.2",
 ]
 
 [project.scripts]
@@ -41,4 +42,5 @@ ignore = ["E501", "SIM300"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["slow: statsmodels-heavy; CI runs them, skip locally with -m 'not slow'"]
 filterwarnings = ["error::FutureWarning"]

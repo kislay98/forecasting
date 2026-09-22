@@ -67,6 +67,7 @@ class BaseForecaster:
 
     name = "base"
     uses_transform = False
+    expensive = False  # True: skipped at warm-up origins unless warmup_models: all
     min_obs = 2
 
     def __init__(self) -> None:

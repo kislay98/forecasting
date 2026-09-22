@@ -9,6 +9,7 @@ import yaml
 
 from forecasting.backtest.store import ForecastStore, content_hash
 from forecasting.cli import cmd_run, cmd_validate, main
+from tests.conftest import pin_baselines
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -65,7 +66,11 @@ def test_main_entry_point(capsys):
 def example_copy(tmp_path: Path) -> Path:
     dst = tmp_path / "ex"
     shutil.copytree(ROOT / "examples", dst, ignore=shutil.ignore_patterns("runs"))
-    return dst / "config.yaml"
+    cfg_path = dst / "config.yaml"
+    raw = yaml.safe_load(cfg_path.read_text())
+    raw["series"] = [pin_baselines(s) for s in raw["series"]]  # keep the CLI tests fast
+    cfg_path.write_text(yaml.safe_dump(raw))
+    return cfg_path
 
 
 def test_run_writes_store_and_manifest(tmp_path: Path):

@@ -14,12 +14,13 @@ from forecasting.data.validate import validate
 from forecasting.errors import FitError
 from forecasting.models.base import BaseForecaster
 from forecasting.models.baselines import Naive
+from tests.conftest import pin_baselines
 from tests.synthetic import gbm_prices, seasonal_ar1, to_frame
 
 
 def setup(df: pd.DataFrame, n_jobs: int = 1, **labels):
     raw = {"id": "s", "source": "csv:x.csv", "freq": "monthly", "H": 12, **labels}
-    cfg = parse_config({"series": [raw], "n_jobs": n_jobs})
+    cfg = parse_config({"series": [pin_baselines(raw)], "n_jobs": n_jobs})
     scfg = cfg.series[0]
     [(series, _)] = validate(df, scfg)
     return cfg, scfg, series

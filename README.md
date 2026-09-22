@@ -19,7 +19,8 @@ Needs [uv](https://docs.astral.sh/uv/). uv installs Python 3.11 if you lack it.
 uv sync                                        # create .venv and install
 uv run forecast validate examples/config.yaml  # validate the example series
 uv run forecast run examples/config.yaml       # backtest the baselines, write the store
-uv run pytest                                  # tests
+uv run pytest                                  # all tests (CI runs these)
+uv run pytest -m "not slow"                    # quick loop, about 30 s
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -68,14 +69,22 @@ series:
     n_test_origins: 250
     models: [zero_return, mean_return, last_return, sma]
     sma_windows: [5, 20, 60, 250]
+    warmup_models: baselines          # baselines | all
+    sarima_search: stepwise           # stepwise | grid
 levels: [0.8, 0.95]                   # interval levels stored as lo_80, hi_80, ...
 output_dir: runs
 n_jobs: 1                             # -1 for all cores; results are identical
 ```
 
-Models in M2 are the baselines. Level series: naive, seasonal_naive, drift, sma.
-Return series: zero_return (also the price random walk), mean_return, last_return,
-sma. `sma` runs one model per window and picks the window on dev origins only.
+| Series | Baselines | Statistical models |
+|---|---|---|
+| Level (`target: level`) | naive, seasonal_naive, drift, sma | ses, ets, sarima, theta, combination (equal-weight ETS + SARIMA + Theta) |
+| Returns (`target: returns`) | zero_return (also the price random walk), mean_return, last_return, sma | ar (AR(p), p <= 5 by AICc) |
+
+`sma` runs one model per window and picks the window on dev origins only. For weekly
+series (m > 24) ets and sarima run on an STL-adjusted series. Statistical models skip
+warm-up origins unless `warmup_models: all`; `sarima_search: grid` fits the full SARIMA
+grid instead of the stepwise search.
 
 ## Data rules
 
@@ -123,6 +132,8 @@ forecasting/
   transforms.py       Interpolator, OutlierFlagger, Log, BoxCox, auto rule, LogReturn
   models/base.py      Forecaster contract, ForecastResult
   models/baselines.py naive, seasonal naive, drift, SMA; zero, mean and last return
+  models/statistical.py  SES, ETS-auto, SARIMA, Theta, AR(p), STL wrapper
+  models/combination.py  equal-weight combination
   backtest/splits.py  origins and dev / test roles
   backtest/engine.py  run_backtest: the only code that slices data
   backtest/store.py   ForecastStore (Parquet) and content hash

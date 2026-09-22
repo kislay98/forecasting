@@ -18,6 +18,7 @@ Anything else is a programming error and propagates.
 
 from __future__ import annotations
 
+import hashlib
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -32,6 +33,7 @@ from forecasting.config import RunConfig, SeriesConfig
 from forecasting.data.validate import Series
 from forecasting.errors import FitError, ForecastContractError, TransformError
 from forecasting.models.base import ModelFactory, check_result
+from forecasting.models.combination import MEMBERS, combine
 from forecasting.models.registry import build_factories
 from forecasting.transforms import (
     Interpolator,
@@ -79,6 +81,7 @@ def _run_fold(
     levels: tuple[float, ...],
     factories: Mapping[str, ModelFactory],
     run_id: str,
+    seed: int = 0,
 ) -> dict[str, list[Any]]:
     t, H, m = origin.t, scfg.H, scfg.m
     returns = scfg.target == "returns"
@@ -130,23 +133,26 @@ def _run_fold(
 
     nan = np.full(H, np.nan)
 
+    # Which models run here: expensive models skip warm-up origins (never scored) unless
+    # warmup_models: all. The combination is derived from its members (M4-4).
+    active: list[tuple[str, Any]] = []
+    for name, factory in factories.items():
+        model = factory(m)
+        if origin.role == "warmup" and scfg.warmup_models == "baselines" and model.expensive:
+            continue
+        active.append((name, model))
+    names = [n for n, _ in active]
+    with_combination = "combination" in scfg.models and all(x in names for x in MEMBERS)
+    out_names = names + (["combination"] if with_combination else [])
+    if not out_names:
+        return cols
+
     # 1-3: slice, impute, target transform. Shared by every model at this fold.
     raw = pd.Series(values[start : t + 1], index=index[start : t + 1])
     if not np.isfinite(values[t]):
-        for name in factories:
-            emit(
-                name,
-                nan,
-                {},
-                {},
-                nan,
-                "skipped",
-                "last observation missing",
-                "none",
-                "",
-                0.0,
-                (len(raw), 0, np.nan),
-            )
+        for name in out_names:
+            emit(name, nan, {}, {}, nan, "skipped", "last observation missing", "none", "",
+                 0.0, (len(raw), 0, np.nan))  # fmt: skip
         return cols
     try:
         filled = Interpolator().fit(raw).transform(raw)
@@ -157,85 +163,94 @@ def _run_fold(
         else:
             z = filled
     except TransformError as e:
-        for name in factories:
-            emit(
-                name,
-                nan,
-                {},
-                {},
-                nan,
-                "failed",
-                f"TransformError: {e}",
-                "none",
-                "",
-                0.0,
-                (len(raw), 0, np.nan),
-            )
+        for name in out_names:
+            emit(name, nan, {}, {}, nan, "failed", f"TransformError: {e}", "none", "", 0.0,
+                 (len(raw), 0, np.nan))  # fmt: skip
         return cols
 
     zv = z.to_numpy(dtype=float)
     info = (len(zv), OutlierFlagger(m).fit(z).n_flags, mase_scale(zv, m))
 
+    # The variance transform is fitted once per fold on the slice and shared by every model
+    # that uses one, so combination members are averaged on the same scale.
+    fold_tr: dict[str, Any] = {}
+
+    def variance_transform():
+        if not fold_tr:
+            try:
+                tr = select_transform(z, scfg.transform, m)
+                fold_tr.update(tr=tr, label=transform_label(tr), z=tr.transform(z))
+            except TransformError as e:
+                fold_tr.update(tr=None, label=f"none (fallback: {e})", z=z)
+        return fold_tr["tr"], fold_tr["label"], fold_tr["z"]
+
+    def back(tr, mean, lo, hi):
+        if tr is None:
+            return mean, lo, hi
+        return (
+            tr.inverse(mean),
+            {k: tr.inverse(v) for k, v in lo.items()},
+            {k: tr.inverse(v) for k, v in hi.items()},
+        )
+
+    def implied_prices(mean):
+        if lr is None:
+            return nan
+        with np.errstate(over="ignore"):
+            prices = lr.inverse(mean)
+        if not np.isfinite(prices).all():
+            raise ForecastContractError("implied price path overflows (non-finite)")
+        return prices
+
     # 5: one fresh model per (window, origin, model).
-    for name, factory in factories.items():
+    member_means: dict[str, np.ndarray | None] = {}
+    for name, model in active:
         t0 = time.perf_counter()
         tr_label, variant = "none", ""
         try:
-            model = factory(m)
-            tr = None
-            z_in = z
+            if hasattr(model, "seed"):
+                model.seed = fold_seed(seed, series_uid, window, t, name)
+            tr, z_in = None, z
             if model.uses_transform:
-                try:
-                    tr = select_transform(z, scfg.transform, m)
-                    tr_label = transform_label(tr)
-                    z_in = tr.transform(z)
-                except TransformError as e:
-                    tr, tr_label = None, f"none (fallback: {e})"
+                tr, tr_label, z_in = variance_transform()
             model.fit(z_in)
             res = model.predict(H, levels)
             check_result(res, H, levels)
-            mean = np.asarray(res.mean, dtype=float)
+            variant = str(res.info.get("variant", ""))
+            mean_t = np.asarray(res.mean, dtype=float)
             lo = {level_tag(k): np.asarray(v, dtype=float) for k, v in res.lower.items()}
             hi = {level_tag(k): np.asarray(v, dtype=float) for k, v in res.upper.items()}
-            if tr is not None:
-                mean = tr.inverse(mean)
-                lo = {k: tr.inverse(v) for k, v in lo.items()}
-                hi = {k: tr.inverse(v) for k, v in hi.items()}
-            level_pred = nan
-            if lr is not None:
-                with np.errstate(over="ignore"):
-                    level_pred = lr.inverse(mean)
-                if not np.isfinite(level_pred).all():
-                    raise ForecastContractError("implied price path overflows (non-finite)")
-            variant = str(res.info.get("variant", ""))
-            emit(
-                name,
-                mean,
-                lo,
-                hi,
-                level_pred,
-                "ok",
-                "",
-                tr_label,
-                variant,
-                time.perf_counter() - t0,
-                info,
-            )
+            mean, lo, hi = back(tr, mean_t, lo, hi)
+            level_pred = implied_prices(mean)
+            if name in MEMBERS:
+                member_means[name] = mean_t
+            emit(name, mean, lo, hi, level_pred, "ok", "", tr_label, variant,
+                 time.perf_counter() - t0, info)  # fmt: skip
         except MODEL_FAILURES as e:
-            emit(
-                name,
-                nan,
-                {},
-                {},
-                nan,
-                "failed",
-                f"{type(e).__name__}: {e}",
-                tr_label,
-                variant,
-                time.perf_counter() - t0,
-                info,
-            )
+            if name in MEMBERS:
+                member_means[name] = None
+            emit(name, nan, {}, {}, nan, "failed", f"{type(e).__name__}: {e}", tr_label,
+                 variant, time.perf_counter() - t0, info)  # fmt: skip
+
+    if with_combination:
+        t0 = time.perf_counter()
+        tr, tr_label, _ = variance_transform()
+        try:
+            mean_t, variant = combine(member_means)
+            mean, _, _ = back(tr, mean_t, {}, {})
+            emit("combination", mean, {}, {}, implied_prices(mean), "ok", "", tr_label,
+                 variant, time.perf_counter() - t0, info)  # fmt: skip
+        except MODEL_FAILURES as e:
+            emit("combination", nan, {}, {}, nan, "failed", f"{type(e).__name__}: {e}",
+                 tr_label, "", time.perf_counter() - t0, info)  # fmt: skip
     return cols
+
+
+def fold_seed(seed: int, uid: str, window: str, t: int, model: str) -> int:
+    """D7: one child seed per (series, window, origin, model), independent of run order."""
+    digest = hashlib.sha256(f"{uid}|{window}|{t}|{model}".encode()).digest()
+    key = tuple(int.from_bytes(digest[i : i + 4], "little") for i in range(0, 16, 4))
+    return int(np.random.SeedSequence(seed, spawn_key=key).generate_state(1)[0])
 
 
 def run_backtest(
@@ -257,7 +272,9 @@ def run_backtest(
     tasks = [(o, w) for w in scfg.windows for o in plan.origins]
     parallel = Parallel(n_jobs=cfg.n_jobs, backend="loky" if cfg.n_jobs != 1 else "sequential")
     chunks = parallel(
-        delayed(_run_fold)(values, index, labels, o, w, scfg, cfg.levels, factories, run_id)
+        delayed(_run_fold)(
+            values, index, labels, o, w, scfg, cfg.levels, factories, run_id, cfg.seed
+        )
         for o, w in tasks
     )
     store = ForecastStore(cfg.levels)

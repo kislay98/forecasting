@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from forecasting.config import LEVEL_MODELS, RETURN_MODELS
+from forecasting.config import LEVEL_BASELINES, RETURN_BASELINES
 
-BASELINES = frozenset(LEVEL_MODELS) | frozenset(RETURN_MODELS)
+BASELINES = frozenset(LEVEL_BASELINES) | frozenset(RETURN_BASELINES)
 
 
 def dev_rows(frame: pd.DataFrame) -> pd.DataFrame:

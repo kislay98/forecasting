@@ -19,6 +19,7 @@ from forecasting.data.validate import validate
 from forecasting.models.baselines import Drift, Naive
 from forecasting.models.registry import build_factories
 from forecasting.transforms import TRANSFORM_BUILDERS
+from tests.conftest import pin_baselines
 from tests.leakage import (
     POISONS,
     CentreOnTransformedScale,
@@ -42,7 +43,7 @@ class TransformedDrift(Drift):
 
 def setup(df: pd.DataFrame, **labels):
     raw = {"id": "s", "source": "csv:x", "freq": "monthly", "H": 12, **labels}
-    cfg = parse_config({"series": [raw]})
+    cfg = parse_config({"series": [pin_baselines(raw)]})
     scfg = cfg.series[0]
     [(series, _)] = validate(df, scfg)
     return cfg, scfg, series
@@ -271,3 +272,69 @@ def test_best_baseline_uses_only_the_chosen_sma(stores):
     for window, choice in select_best_baseline(frame)["s"].items():
         smas = [m for m in choice["scores"] if m.startswith("sma_")]
         assert smas == [sma[window]["model"]]
+
+
+# ---------------------------------------------------------------------------- L1, M4 models
+
+
+def _stat_setup(df: pd.DataFrame, **labels):
+    raw = {
+        "id": "s",
+        "source": "csv:x",
+        "n_dev_origins": 6,
+        "n_test_origins": 6,
+        "warmup_models": "all",
+        **labels,
+    }  # all: every sampled origin fits the models
+    cfg = parse_config({"series": [raw]})
+    scfg = cfg.series[0]
+    [(series, _)] = validate(df, scfg)
+    return cfg, scfg, series
+
+
+@pytest.mark.slow
+def test_L1_statistical_level_models_are_blind_to_the_future():
+    y = seasonal_ar1(n=84, seed=11) + np.linspace(0, 20, 84)
+    df = to_frame(y, "monthly", unique_id="s")
+    df.loc[[50], "y"] = np.nan  # an interpolated gap inside some slices
+    cfg, scfg, series = _stat_setup(
+        df,
+        freq="monthly",
+        H=6,
+        transform="auto",
+        models=["ses", "ets", "sarima", "theta", "combination"],
+    )
+    result = l1_check(series, scfg, cfg, lambda s: build_factories(scfg), n_origins=10, n_jobs=-1)
+    assert result.leaking_models == set(), result.leaks
+    assert set(result.leaks) == {"ses", "ets", "sarima", "theta", "combination"}
+
+
+@pytest.mark.slow
+def test_L1_stl_wrapped_weekly_models_are_blind_to_the_future():
+    df = to_frame(seasonal_ar1(n=200, m=52, seed=13), "weekly", unique_id="s")
+    cfg, scfg, series = _stat_setup(
+        df,
+        freq="weekly",
+        H=13,
+        transform="none",
+        n_dev_origins=3,
+        n_test_origins=3,
+        models=["ets", "sarima", "theta"],
+    )
+    result = l1_check(series, scfg, cfg, lambda s: build_factories(scfg), n_origins=10, n_jobs=-1)
+    assert result.leaking_models == set(), result.leaks
+
+
+def test_L1_ar_on_returns_is_blind_to_the_future():
+    cfg, scfg, series = _stat_setup(
+        returns_series(),
+        freq="trading_days",
+        target="returns",
+        H=20,
+        initial_window=250,
+        n_test_origins=60,
+        models=["ar"],
+    )
+    result = l1_check(series, scfg, cfg, lambda s: build_factories(scfg), n_origins=10)
+    assert result.leaking_models == set(), result.leaks
+    assert set(result.leaks) == {"ar"}

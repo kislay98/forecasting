@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 
 from forecasting.backtest.engine import run_backtest
 from forecasting.backtest.splits import Origin, OriginPlan, make_origins
@@ -75,6 +76,12 @@ class L1Result:
         return {m for m, kinds in self.leaks.items() if kinds}
 
 
+def _run_one(series, scfg, cfg, make_factories, plan, kind, t):
+    s = series if kind == "clean" else poison(series, t, kind, seed=t)
+    frame = run_backtest(s, scfg, cfg, "l1", make_factories(s), plan)[0].frame()
+    return forecast_columns(frame)
+
+
 def l1_check(
     series: Series,
     scfg: SeriesConfig,
@@ -82,30 +89,40 @@ def l1_check(
     make_factories: FactoryMaker,
     n_origins: int = 10,
     seed: int = 20260922,
+    n_jobs: int = 1,
 ) -> L1Result:
-    """Run L1 for every model and window at n sampled origins."""
+    """Run L1 for every model and window at n sampled origins.
+
+    n_jobs > 1 runs the (origin, poison) backtests in parallel processes; make_factories
+    must then be picklable and free of in-process side effects (the L2 transform test,
+    which monkeypatches a registry, stays serial).
+    """
     full_plan = make_origins(len(series.y), scfg)
+    origins = sample_origins(full_plan, n_origins, seed)
+    jobs = [(o, kind) for o in origins for kind in ("clean", *POISONS)]
+    frames = Parallel(n_jobs=n_jobs, backend="loky" if n_jobs != 1 else "sequential")(
+        delayed(_run_one)(
+            series, scfg, cfg, make_factories, replace(full_plan, origins=(o,)), kind, o.t
+        )
+        for o, kind in jobs
+    )
+    by_job = dict(zip(jobs, frames, strict=True))
     leaks: dict[str, set[str]] = {}
     compared = 0
-    for origin in sample_origins(full_plan, n_origins, seed):
-        plan = replace(full_plan, origins=(origin,))
-        clean = forecast_columns(
-            run_backtest(series, scfg, cfg, "l1", make_factories(series), plan)[0].frame()
-        )
-        for name in clean["model"].unique():
+    for o in origins:
+        clean = by_job[(o, "clean")]
+        names = clean["model"].unique()
+        for name in names:
             leaks.setdefault(name, set())
         compared += len(clean)
         for kind in POISONS:
-            bad = poison(series, origin.t, kind, seed=origin.t)
-            other = forecast_columns(
-                run_backtest(bad, scfg, cfg, "l1", make_factories(bad), plan)[0].frame()
-            )
-            for name in clean["model"].unique():
+            other = by_job[(o, kind)]
+            for name in names:
                 a = clean[clean["model"] == name].reset_index(drop=True)
                 b = other[other["model"] == name].reset_index(drop=True)
                 if not a.equals(b):
                     leaks[name].add(kind)
-    return L1Result(n_origins=n_origins, n_rows_compared=compared, leaks=leaks)
+    return L1Result(n_origins=len(origins), n_rows_compared=compared, leaks=leaks)
 
 
 # ---------------------------------------------------------------- planted leaks (L2)

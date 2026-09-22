@@ -177,12 +177,15 @@ def test_backtest_defaults_depend_on_freq_and_target():
     m = parse_config(series()).series[0]
     assert (m.initial_window, m.rolling_length, m.origin_step) == (36, 36, 1)
     assert (m.n_dev_origins, m.n_test_origins, m.transform, m.window) == (20, 30, "auto", "both")
-    assert m.models == ("naive", "seasonal_naive", "drift", "sma")
+    assert m.models == (
+        "naive", "seasonal_naive", "drift", "sma", "ses", "ets", "sarima", "theta", "combination"
+    )  # fmt: skip
+    assert (m.warmup_models, m.sarima_search) == ("baselines", "stepwise")
     assert m.sma_windows == (3, 6, 12, 24)
     t = parse_config(series(freq="trading_days", target="returns", H=20)).series[0]
     assert (t.initial_window, t.rolling_length, t.origin_step) == (500, 500, 5)
     assert (t.n_test_origins, t.transform) == (250, "none")
-    assert t.models == ("zero_return", "mean_return", "last_return", "sma")
+    assert t.models == ("zero_return", "mean_return", "last_return", "sma", "ar")
     assert t.sma_windows == (5, 20, 60, 250)
     ns = parse_config(series(season="none")).series[0]
     assert "seasonal_naive" not in ns.models and ns.sma_windows == (2, 3, 6)
@@ -201,6 +204,12 @@ def test_backtest_defaults_depend_on_freq_and_target():
         ({"models": []}, "series[0].models"),
         ({"sma_windows": [1, 3]}, "series[0].sma_windows"),
         ({"initial_window": 1}, "series[0].initial_window"),
+        ({"models": ["naive", "combination"]}, "series[0].models"),
+        ({"models": ["ets", "theta", "combination"]}, "series[0].models"),
+        ({"models": ["ar"]}, "series[0].models"),
+        ({"target": "returns", "models": ["ets"]}, "series[0].models"),
+        ({"warmup_models": "some"}, "series[0].warmup_models"),
+        ({"sarima_search": "auto"}, "series[0].sarima_search"),
     ],
 )
 def test_backtest_keys_validated(over, key):

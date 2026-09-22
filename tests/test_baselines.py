@@ -25,7 +25,7 @@ LEVELS = (0.8, 0.95)
 
 
 def test_registry_matches_config_names():
-    names = (set(LEVEL_MODELS) | set(RETURN_MODELS)) - {"sma"}
+    names = (set(LEVEL_MODELS) | set(RETURN_MODELS)) - {"sma", "combination"}
     assert set(REGISTRY) == names
 
 
@@ -131,10 +131,13 @@ def test_too_short_and_nan_raise_fit_error(make):
 def test_factories_are_fresh_and_expand_sma():
     scfg = make_scfg(H=12)
     f = build_factories(scfg)
-    assert set(f) == {"naive", "seasonal_naive", "drift", "sma_3", "sma_6", "sma_12", "sma_24"}
+    stat = {"ses", "ets", "sarima", "theta"}  # combination is derived, not a factory
+    assert (
+        set(f) == {"naive", "seasonal_naive", "drift", "sma_3", "sma_6", "sma_12", "sma_24"} | stat
+    )
     assert f["naive"](12) is not f["naive"](12)
     rf = build_factories(make_scfg(freq="trading_days", target="returns", H=20))
-    assert set(rf) == {
+    assert set(rf) == {"ar"} | {
         "zero_return",
         "mean_return",
         "last_return",

@@ -35,8 +35,16 @@ WINDOWS: tuple[str, ...] = ("expanding", "rolling", "both")
 DEFAULT_SEASON: dict[str, int] = {"monthly": 12, "quarterly": 4, "weekly": 52, "trading_days": 1}
 
 # Model names per target. models/registry.py builds them; a test keeps the two in sync.
-LEVEL_MODELS: tuple[str, ...] = ("naive", "seasonal_naive", "drift", "sma")
-RETURN_MODELS: tuple[str, ...] = ("zero_return", "mean_return", "last_return", "sma")
+LEVEL_BASELINES: tuple[str, ...] = ("naive", "seasonal_naive", "drift", "sma")
+RETURN_BASELINES: tuple[str, ...] = ("zero_return", "mean_return", "last_return", "sma")
+# Scope update: ETS, SARIMA and Theta only for level series; AR(p) for returns.
+LEVEL_STATISTICAL: tuple[str, ...] = ("ses", "ets", "sarima", "theta", "combination")
+RETURN_STATISTICAL: tuple[str, ...] = ("ar",)
+LEVEL_MODELS: tuple[str, ...] = LEVEL_BASELINES + LEVEL_STATISTICAL
+RETURN_MODELS: tuple[str, ...] = RETURN_BASELINES + RETURN_STATISTICAL
+COMBINATION_MEMBERS: tuple[str, ...] = ("ets", "sarima", "theta")  # fixed before any run
+WARMUP_MODES: tuple[str, ...] = ("baselines", "all")
+SARIMA_SEARCHES: tuple[str, ...] = ("stepwise", "grid")
 
 # Backtest design defaults (spec: Volume; scope update for trading days).
 TRADING_INITIAL = 500
@@ -72,6 +80,8 @@ SERIES_KEYS = {
     "n_test_origins",
     "models",
     "sma_windows",
+    "warmup_models",
+    "sarima_search",
 }
 REQUIRED_SERIES_KEYS = ("id", "source", "freq", "H")
 TOP_KEYS = {"series", "seed", "levels", "output_dir", "n_jobs"}
@@ -114,6 +124,8 @@ class SeriesConfig:
     n_test_origins: int = N_TEST_ORIGINS
     models: tuple[str, ...] = ()
     sma_windows: tuple[int, ...] = ()
+    warmup_models: Literal["baselines", "all"] = "baselines"
+    sarima_search: Literal["stepwise", "grid"] = "stepwise"
     warnings: tuple[str, ...] = ()
 
     @property
@@ -339,6 +351,17 @@ def _parse_series(raw: Any, i: int) -> SeriesConfig:
         if len(set(models_raw)) != len(models_raw):
             raise ConfigError(f"{p}.models", "contains duplicates")
         models = tuple(models_raw)
+    if "combination" in models:
+        absent = [x for x in COMBINATION_MEMBERS if x not in models]
+        if absent:
+            raise ConfigError(f"{p}.models", f"combination needs its fixed members; add {absent}")
+
+    warmup_models = raw.get("warmup_models", "baselines")
+    if warmup_models not in WARMUP_MODES:
+        raise ConfigError(f"{p}.warmup_models", f"must be one of {list(WARMUP_MODES)}")
+    sarima_search = raw.get("sarima_search", "stepwise")
+    if sarima_search not in SARIMA_SEARCHES:
+        raise ConfigError(f"{p}.sarima_search", f"must be one of {list(SARIMA_SEARCHES)}")
 
     sma_raw = raw.get("sma_windows")
     if sma_raw is None:
@@ -380,6 +403,8 @@ def _parse_series(raw: Any, i: int) -> SeriesConfig:
         n_test_origins=n_test,
         models=models,
         sma_windows=sma_windows,
+        warmup_models=warmup_models,
+        sarima_search=sarima_search,
         warnings=tuple(warnings),
     )
 

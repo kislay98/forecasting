@@ -12,8 +12,8 @@ each weekend session can start from the repo alone. Read it before any milestone
 | M1 | Repo, config, adapters, validation, fixtures, synthetic DGPs, `forecast validate` | Done (22 Sep 2026) |
 | M2 | Transforms (incl. LogReturn), return and level baselines, origins, engine, store, `forecast run` | Done (22 Sep 2026) |
 | M3 | Leakage tests L1, L2, L4, L5 | Done (22 Sep 2026) |
-| M4 | Statistical models (AR(p) on returns; ETS, SARIMA, Theta for the control), combination | Next |
-| M5 | Metrics and tests (DM-HLN, Holm, Kupiec, MCS, Pesaran-Timmermann, skill bootstrap) | |
+| M4 | Statistical models (AR(p) on returns; SES, ETS, SARIMA, Theta, STL wrapper for the control), combination | Done (22 Sep 2026) |
+| M5 | Metrics and tests (DM-HLN, Holm, Kupiec, MCS, Pesaran-Timmermann, skill bootstrap) | Next |
 | M6 | Diagnostics, report, CLI `run` and `report` | |
 | M7 | Known-answer acceptance, L3 canary, simulation conformance | |
 | M8 | Real data run, gate.yaml (P1), go/no-go | |
@@ -105,15 +105,36 @@ Choices the spec left open or where two parts of it disagree. Each says where it
 
 L3 (random-walk canary) is M7; P1 (gate.yaml pre-registration) is M8.
 
-## Notes for M4
+## M4 implementation decisions
 
-- Add every new model and transform path to `honest_factories` in tests/test_leakage.py so L1 covers it. STL inside each fold (leakage source 7) and KPSS / seasonal tests inside model selection (source 8) are exactly what L1 will catch if done globally.
-- M4 adds statsmodels. Keep L1 at 10 origins; statsmodels fits are slower, so parametrize over a short series if runtime grows past the 30 s unit budget.
-- Combination membership (ETS-auto, SARIMA, Theta) is fixed in code before any run (leakage source 11); AR(p) on returns picks p by AICc inside the fold.
+| # | Decision | Why |
+|---|---|---|
+| M4-1 | Level series get SES, ETS-auto, SARIMA, Theta and the combination; return series get AR(p). For m > 24 (weekly), ets and sarima keep their names but run on an STL-adjusted series (STLAdjusted). ETS, SARIMA and Theta are not offered for returns | Scope update: they are pointless on returns. One name per model keeps the store and the combination simple |
+| M4-2 | SARIMA searches the spec's bounded space (p, q <= 2; P, Q <= 1) stepwise, Hyndman-Khandakar style, by default; `sarima_search: grid` fits all 36. Measured on 120-month synthetic series: grid 1.6 to 7.2 s per fold, stepwise 0.7 to 1.7 s with 10 to 14 fits; same order on 3 of 4 processes, 2.7 AICc worse on the trend reversal | The full grid alone would take about 11 minutes for a 10-year monthly backtest, past A9's 10. D3's reopen trigger applies if stepwise misses clearly better orders |
+| M4-3 | Expensive models (every statistical model and the combination) skip warm-up origins by default (`warmup_models: baselines`); baselines still run everywhere. The design for A4 is therefore baselines at all origins, statistical models at dev and test origins | Warm-up rows are never scored. On the real FRED series (from 1939) they would be about 90% of the statistical fitting cost |
+| M4-4 | The combination is formed by the engine from the members already fitted at the fold, on the fold's transformed scale, then back-transformed. A member failure leaves the mean of the rest (the variant says which failed); all failing is a failed row. Config refuses `combination` without all three members. EqualWeight is the same rule as a standalone Forecaster; a test checks the two agree to 1e-10 | No refits; membership is fixed in code before any run (leakage source 11) |
+| M4-5 | The variance transform is fitted once per fold and shared by every model that uses one | Same result as before, computed once, and it guarantees combination members share one scale |
+| M4-6 | D7 is wired: each (series, window, origin, model) gets a seed from SeedSequence(seed, spawn_key = sha256 of those four). The only random step in Phase 1 is ETS's simulated intervals for multiplicative models | Order-independent, reproducible intervals; poisoned L1 runs get the same seeds as clean ones |
+| M4-7 | Both statsmodels pitfalls from the research are handled: models are always fitted on a pandas Series (array input breaks ETS prediction), and ETS simulation is seeded through `rng` (it has no `random_state`). Warnings are silenced inside fits; numerical exceptions become FitError rows | Found again in the M4 probe; the spec predicted both |
+| M4-8 | SARIMA: D = 1 when the slice's robust-STL seasonal strength exceeds 0.64 (fpp3 nsdiffs); d by repeated KPSS at 5%, up to 2, on the seasonally differenced slice; trend 'c' only if d + D <= 1 (in statsmodels 'c' with d = 1 is the drift, verified); seasonal part only when 1 < m <= 24 and there are at least 2m + 1 points | Spec model table and D3; all tests run inside the fold (leakage source 8) |
+| M4-9 | ETS: error {A, M}, trend {N, A, Ad}, season {N, A, M}; additive error with multiplicative season is excluded (unstable, as in fpp3 and forecast::ets); multiplicative components only if the (transformed) slice is positive; season only when m <= 24 and n >= 2m. Up to 15 variants per fold | Spec model table |
+| M4-10 | Theta: statsmodels ThetaModel with theta = 2; deseasonalises when m > 1, n >= 2m and its own 90% ACF test passes; multiplicative if positive, else additive | Spec model table |
+| M4-11 | AR(p): constant always, p in 0..5 by AICc on a common sample (first 5 points held back for every p), then refitted on the whole slice. AR(0) is the mean-return model | Scope update; a common sample makes AICc comparable across p |
+| M4-12 | STL wrapper: robust STL on the slice; the seasonal component is continued with seasonal naive; bounds are shifted by it and seasonal uncertainty is not added (the STLForecast rule) | Spec: seasonal ETS and SARIMA are impractical at m = 52 |
+| M4-13 | Tests: 6 statsmodels-heavy tests carry a `slow` marker. CI runs everything; `uv run pytest -m "not slow"` is the quick local loop (about 30 s). L1 now covers every model: monthly level models with the auto transform and a gap (10 origins, both windows), STL-wrapped weekly models, and AR on returns. The L1 harness can run in parallel (n_jobs) | The spec's 30 s budget is for unit tests; L1 on every model takes about a minute on 4 cores |
+| M4-14 | A9 measured 22 Sep 2026: a 120-month synthetic series with every level model, both windows, 73 origins (23 warm-up), one thread: 6.5 minutes, 18,264 rows, 0 failures. SARIMA is 70% of the time, ETS 28%. The example config (both series, every model) runs in 7 minutes | Passes A9 (under 10 minutes) and A4 (failures under 1%). Rerun on real data: fits on longer series are slower |
+
+## Notes for M5
+
+- Score only test rows (dev for selection), status ok, y_true present. Warm-up rows exist only for baselines (M4-3).
+- "sma" means the dev-chosen sma_k and the reference for relative MAE is `select_best_baseline` (both in manifest.json). M5 may move to a per-horizon best baseline if the report needs it (M3-5).
+- MAPE and sMAPE are off for returns; returns also get directional accuracy with the Pesaran-Timmermann test and out-of-sample R^2 against the historical mean (scope update). Cumulative h-day returns come from level_true / level_pred (M2-3).
+- The combination has no intervals, so coverage, Winkler and Kupiec skip it.
+- The effective sample at horizon h is about n / h; print both next to every statistic (spec: Horizons).
 
 ## Open items for later milestones
 
 - NSE holiday calendar: optional, would turn flagged weekdays into known closures. Not needed while flags are reported.
 - Nifty source: price index vs. TRI. Phase 1 uses the price index and the report must say so (scope update).
 - gate.yaml (P1) must be committed before the first run on real data that includes test origins (M8). `forecast run` reports whether it exists.
-- M4 adds statsmodels and the STL wrapper for weekly series (m > 24).
+- Real electricity data starts in 1939. Statistical models only fit at dev and test origins (M4-3), but fits on ~1,000 points are slower; `start:` can shorten the history if a run is too slow.
