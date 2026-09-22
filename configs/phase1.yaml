@@ -1,0 +1,21 @@
+# Phase 1 run config from the spec (scope update, 22 Sep 2026).
+# H and decision horizons are proposals; fix them before gate.yaml is committed (P1).
+seed: 20260922
+series:
+  - id: nifty50
+    source: csv:../data/nifty50.csv     # NSE historical index data (price index, not TRI)
+    columns: {date: Date, value: Close}
+    freq: trading_days                  # exchange closures are not missing data
+    season: none
+    target: returns                     # log returns, computed inside each fold (M2)
+    H: 20                               # about one trading month
+    decision_horizons: [1, 5, 20]       # day, week, month
+
+  - id: electricity
+    source: fred:IPG2211A2N             # cached under configs/data/fred/ on first load
+    freq: monthly
+    season: 12
+    target: level
+    positive: true
+    H: 24
+    decision_horizons: [1, 12, 24]

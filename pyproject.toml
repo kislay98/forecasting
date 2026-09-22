@@ -1,0 +1,44 @@
+[project]
+name = "forecasting"
+version = "0.1.0"
+description = "Leak-free multi-horizon forecasting and uncertainty study (Phase 1: honest point forecast)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "joblib>=1.3",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=15",
+    "pyyaml>=6.0",
+    "scipy>=1.11",
+]
+
+[project.scripts]
+forecast = "forecasting.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["forecasting"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# E501: the formatter owns line length. SIM300: H and T are the spec's names, not constants.
+ignore = ["E501", "SIM300"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = ["error::FutureWarning"]

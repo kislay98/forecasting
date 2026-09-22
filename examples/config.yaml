@@ -1,0 +1,23 @@
+# Example run config on synthetic stand-ins, so `forecast validate` works out of the box.
+# The real Phase 1 config (Nifty 50 + electricity control) is configs/phase1.yaml.
+seed: 20260922
+series:
+  - id: index_like                      # stands in for Nifty 50 (U1)
+    source: csv:data/index_like.csv
+    columns: {date: Date, value: Close}
+    date_format: "%d-%b-%Y"
+    freq: trading_days
+    season: none
+    target: returns
+    H: 20
+    decision_horizons: [1, 5, 20]
+
+  - id: electricity_like                # stands in for FRED IPG2211A2N (U2)
+    source: csv:data/electricity_like.csv
+    columns: {date: observation_date, value: value}
+    freq: monthly
+    season: 12
+    target: level
+    positive: true
+    H: 24
+    decision_horizons: [1, 12, 24]
