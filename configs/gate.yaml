@@ -1,7 +1,8 @@
 # Pre-registration for the Phase 1 gate (P1), committed before the first
 # `forecast run configs/phase1.yaml`, which scores test origins on real data.
 # Design registered with it (configs/phase1.yaml): electricity from 1990-01-01 with 120
-# test origins, both windows; Nifty 50 with the spec's trading-day design.
+# test origins, both windows; Nifty 50 from 1996-01-01 on the spec's trading-day design,
+# with the 46 weekend sessions dropped from data/nifty50.csv (DECISIONS M8-5, M8-6).
 # The report issues the A10 decision only if this file was committed before the run and
 # is unchanged since (its sha256 is recorded in the run's manifest).
 registered: 2026-09-23
