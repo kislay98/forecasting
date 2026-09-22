@@ -25,7 +25,8 @@ before any milestone.
 | M5 | Metrics and tests (DM-HLN, Holm, Kupiec, MCS, Pesaran-Timmermann, skill bootstrap), scoring layer | Done (22 Sep 2026) |
 | M6 | Residual diagnostics, report (RQ1 to RQ6, exit table, plots), CLI `run` and `report` | Done (22 Sep 2026) |
 | M7 | Known-answer acceptance (A3 to A9), L3 canary, simulation conformance | Done (23 Sep 2026) |
-| M8 | Real data run, gate.yaml (P1), go/no-go | Next |
+| M8 | gate.yaml (P1) loading and matching, committed-before-run check, A10 gate decision in the report | Done (23 Sep 2026) |
+| Phase 1 run | Real Nifty 50 and electricity data loaded and validated; `forecast run` pending | In progress |
 
 ## Scope update (22 Sep 2026)
 
@@ -199,14 +200,27 @@ L3 (random-walk canary) is M7; P1 (gate.yaml pre-registration) is M8.
 | M7-8 | Simulation conformance: ETS (additive-error variants only) and SARIMA fitted on the three synthetic series, 10,000 Gaussian paths from statsmodels `simulate(anchor="end", repetitions=N, rng=...)`. The path mean must be within 3 sigma_h / sqrt(N) of the point forecast and P10 / P90 within 3 x sqrt(p (1 - p) / N) / phi(z_p) x sigma_h of the analytic 80% bounds (the asymptotic SE of a Normal sample quantile), sigma_h from the analytic bounds. Observed maximum |z| 2.1 over 216 comparisons. Multiplicative-error ETS is excluded because statsmodels simulates its intervals itself (1,000 paths), so the comparison would be noise against noise | Spec pass condition. The seed pitfall is covered by `rng`; the array-vs-Series pitfall by the wrappers (M4-7) |
 | M7-9 | pipeline.build_manifest and plan_summary are public so tests build the manifest of an in-memory backtest exactly as a run directory would carry it | One code path for what the report reads |
 
-## Notes for M8
+## M8 implementation decisions
+
+| # | Decision | Why |
+|---|---|---|
+| M8-1 | gate.yaml sits next to the run config. It fixes alpha, the primary window, and per series the decision horizons and the model list, which must equal the run config's; plus the thresholds from research 8.5 (relative MAE, 80% and 95% coverage bands, sub-periods, the leakage gain over ETS). Loading is strict: unknown keys and mismatches are ConfigError | One file holds everything the verdicts depend on, so a later reader can see what was fixed in advance and what was not |
+| M8-2 | The manifest records gate.yaml's sha256 and the git commit at run time. The report issues the A10 gate decision only when the file was committed before the run and is unchanged since; otherwise it prints the exit decision as provisional and names the reason ("no gate.yaml", "uncommitted changes at run time", "changed after this run") | P1 means the rules were written down first. A hash alone would not catch a file that was never committed, and a commit alone would not catch a later edit |
+| M8-3 | The gate is checked end to end: editing gate.yaml after a run makes the report refuse the A10 decision | The guard is the whole point of P1, so it is tested rather than assumed |
+| M8-4 | Nifty 50 history comes from niftyindices.com. The site's form refuses ranges longer than a year, so scripts/fetch_nifty50.py walks the history one calendar year at a time against POST /BackPage/getHistoricaldatatabletoString and stitches the years together. The endpoint is IP restricted (data centre and VPN addresses get HTML back, not JSON), so the script must run from an ordinary connection | The download has to be reproducible by someone else, and the one-year limit is the site's, not the data's |
+| M8-5 | data/nifty50_nse_raw.csv is every row the site returns (8,807 rows, 03 Jul 1990 to 22 Sep 2026). data/nifty50.csv is the analysis file and drops the 46 weekend sessions (Muhurat, budget Saturdays, live test sessions), because the trading_days rule rejects weekend rows outright. Both are committed | Keeping the untouched download makes the cleaning auditable. Relaxing the validator rule instead would weaken an M1 guard that exists to catch mangled files, for 0.5% of rows whose moves simply fold into the next trading day's return |
+| M8-6 | nifty50 starts at 1996-01-01 (7,602 rows). The index base date is 03 Nov 1995; earlier values are back-computed, and 1990 to 1993 has multi-week gaps that trip the closure rule (12 consecutive weekdays with no value from 1992-06-29). 1994-01-01 is the earliest start that validates, but its first two years are still back-computed | Every scored observation should be a real traded close. 7,601 usable points is far above the 1,865 minimum for H = 20 |
+| M8-7 | The FRED cache configs/data/fred/IPG2211A2N.csv is committed (the .gitignore rule is negated for that one folder), contrary to the M1-14 assumption that each machine fetches its own | A pre-registered run has to reproduce byte for byte on another machine, and fred.stlouisfed.org is not reachable from every network this project runs on |
+| M8-8 | Series dates are parsed with an explicit `date_format` ("%d %b %Y" for the NSE export) rather than letting pandas infer | Inference on "03 Jul 1990" style dates is exactly where a silent day/month swap hides |
+
+## Notes for the Phase 1 run
 
 - The report's exit decision is still labelled provisional. M8 wires gate.yaml: primary window, decision horizons, thresholds (research 8.5: relative MAE below 1 at every h up to h*, significant at the decision horizons; 80% coverage in [75, 85]% and 95% in [91, 98]% per bucket; bias; 3 of 4 sub-periods) and the model list; `exit_decision` reads them; the report refuses a gate decision when gate.yaml changed after the first test-origin run (P1, M2-13 records its sha256).
 - Untestable decision horizons (M7-3) matter for the real electricity control: with 30 monthly test origins only h = 1 of (1, 12, 24) is testable. Either accept that RQ1 rests on h = 1 there, or give the control more test origins (`n_test_origins`) before gate.yaml fixes the design. Nifty (250 origins, H = 20) has n / h = 12.5 at h = 20: every decision horizon is testable.
 - The canary's full tier has not been run yet (it is hours). Run `uv run pytest -m canary -s` once, or wait for the first nightly, before the real data run.
 - A1 on real data: `forecast run --force` must reproduce the content hash (tests/test_cli.py does this on the example).
-- FRED is fetched once into the config's data/fred cache (M1-14); commit gate.yaml first, then run.
-- Real electricity data starts in 1939 (Open items). Statistical fits on 1,000-point slices are slower than the 150-point A9 measurement; `start:` shortens the history if a run passes 10 minutes.
+- Data is in place: data/nifty50.csv (M8-5, M8-6) and the committed FRED cache (M8-7). `forecast validate configs/phase1.yaml` passes both series.
+- Electricity is already cut to 1990-01-01 by the config (440 rows), so the 1939 history is not fitted. Nifty is 7,601 points, well past the 150-point A9 timing measurement: watch the first run against the 10 minute budget.
 
 ## Open items for later milestones
 

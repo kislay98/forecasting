@@ -5,6 +5,7 @@ __pycache__/
 .ruff_cache/
 runs/
 **/data/fred/
+!configs/data/fred/
 *.egg-info/
 dist/
 build/

@@ -156,6 +156,29 @@ Validation never changes a value. It refuses data it cannot evaluate honestly.
 Each rule has a bad fixture in `tests/fixtures/` (regenerate with
 `uv run python tests/fixtures/make_fixtures.py`).
 
+## Phase 1 data
+
+| File | What it is |
+|---|---|
+| `data/nifty50_nse_raw.csv` | every row niftyindices.com returns, 8,807 rows, 03 Jul 1990 to 22 Sep 2026 |
+| `data/nifty50.csv` | the analysis file: the same rows minus 46 weekend sessions (Muhurat, budget Saturdays, live test sessions) |
+| `configs/data/fred/IPG2211A2N.csv` | the FRED cache for the electricity control, committed so a run reproduces off this machine |
+
+`configs/phase1.yaml` reads the Nifty file from `1996-01-01` (the index base date is
+03 Nov 1995; earlier values are back-computed and the early 1990s have multi-week gaps).
+
+To refresh the Nifty history:
+
+```bash
+uv run python scripts/fetch_nifty50.py
+```
+
+The site's form refuses ranges longer than a year, so the script walks the history one
+calendar year at a time and stitches the years together. The endpoint is IP restricted:
+run it from an ordinary connection, not a data centre or a VPN, or it returns HTML
+instead of JSON and the script stops with that message. Refreshing the data changes the
+run_id, so re-register the gate if a run has already been scored.
+
 ## Leakage tests
 
 `tests/test_leakage.py` runs on every push:
@@ -220,6 +243,9 @@ tests/
   acceptance.py       in-memory synthetic backtests and the "beats naive" statistic (A3, L3)
   fixtures/           one bad CSV per rule
 configs/phase1.yaml   the real Phase 1 series
+configs/gate.yaml     the Phase 1 pre-registration (P1)
+data/                 the Nifty 50 history (raw and analysis files)
+scripts/fetch_nifty50.py  re-download the Nifty 50 history from niftyindices.com
 docs/                 spec and research (snapshots of the Claude Docs pages)
 examples/             synthetic stand-ins so the CLI runs out of the box
 ```

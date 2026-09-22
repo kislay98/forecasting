@@ -6,6 +6,9 @@ series:
   - id: nifty50
     source: csv:../data/nifty50.csv     # NSE historical index data (price index, not TRI)
     columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"             # NSE export format, e.g. 03 Jul 1990
+    start: 1996-01-01                   # index base date is 03 Nov 1995; earlier values are
+                                        # back-computed and the early 1990s have multi-week gaps
     freq: trading_days                  # exchange closures are not missing data
     season: none
     target: returns                     # log returns, computed inside each fold (M2)
