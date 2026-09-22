@@ -1,6 +1,7 @@
-# Phase 1 run config from the spec (scope update, 22 Sep 2026).
-# H and decision horizons are proposals; fix them before gate.yaml is committed (P1).
+# Phase 1 run config from the spec (scope update, 22 Sep 2026). Pre-registered with
+# configs/gate.yaml (P1, 23 Sep 2026): change either only with a new gate commit.
 seed: 20260922
+n_jobs: 4                             # parallel folds; not part of the run_id
 series:
   - id: nifty50
     source: csv:../data/nifty50.csv     # NSE historical index data (price index, not TRI)
@@ -13,6 +14,9 @@ series:
 
   - id: electricity
     source: fred:IPG2211A2N             # cached under configs/data/fred/ on first load
+    start: 1990-01-01                   # FRED starts in 1939; 36 years is enough history
+    n_test_origins: 120                 # 10 years of test origins: n / h = 5 at h = 24, so
+                                        # DM-HLN can run at every decision horizon (M7-3)
     freq: monthly
     season: 12
     target: level

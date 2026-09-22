@@ -1,0 +1,28 @@
+# Pre-registration for the Phase 1 gate (P1), committed before the first
+# `forecast run configs/phase1.yaml`, which scores test origins on real data.
+# Design registered with it (configs/phase1.yaml): electricity from 1990-01-01 with 120
+# test origins, both windows; Nifty 50 with the spec's trading-day design.
+# The report issues the A10 decision only if this file was committed before the run and
+# is unchanged since (its sha256 is recorded in the run's manifest).
+registered: 2026-09-23
+alpha: 0.05
+primary_window: expanding           # verdicts use it; rolling answers RQ5
+series:
+  nifty50:
+    decision_horizons: [1, 5, 20]   # day, week, month of trading days
+    models: [zero_return, mean_return, last_return, sma, ar]
+    expectation: >
+      Nothing beats the zero-return forecast on the mean (U5). A win over 30% would be a
+      leakage audit, not a result.
+  electricity:
+    decision_horizons: [1, 12, 24]
+    models: [naive, seasonal_naive, drift, sma, ses, ets, sarima, theta, combination]
+    expectation: >
+      Seasonal models beat seasonal naive at every horizon (positive control). If they do
+      not, the harness is broken.
+thresholds:
+  relative_mae_below: 1.0           # at every h up to h*, vs the dev-chosen best baseline
+  coverage_80: [0.75, 0.85]         # research 8.5 criterion 3, per judged bucket
+  coverage_95: [0.91, 0.98]
+  subperiods_min: 3                 # of 4 consecutive blocks of test origins
+  leakage_gain_over_ets: 0.30       # exit table: audit before anything else
