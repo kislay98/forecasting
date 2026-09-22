@@ -1,9 +1,18 @@
 # Decisions
 
-The source of truth is the spec ("Forecasting System: Roadmap and Phase 1
-Implementation Specification") and the research review. Where they conflict, the
-spec's "Scope update: Nifty 50" section wins. This file records the decisions so
-each weekend session can start from the repo alone. Read it before any milestone.
+The source of truth is in this repo:
+
+| Doc | File | Edited at |
+|---|---|---|
+| Spec: roadmap and Phase 1 implementation specification | [docs/spec.md](docs/spec.md) | [Claude Docs page](https://claude.ai/code/artifact/a0e49b2a-df95-4575-9a3f-11431cdef575) |
+| Research review and design | [docs/research.md](docs/research.md) | [Claude Docs page](https://claude.ai/code/artifact/0c667958-fdfe-4001-a11e-2fba23f66803) |
+
+The files are snapshots (spec revision 28, research revision 17, 22 Sep 2026). If the
+Claude Docs pages change, refresh the snapshots in the same commit as the code that
+follows them. Where the spec and research conflict, the spec wins; within the spec, the
+"Scope update: Nifty 50" section overrides older sections. This file records the
+decisions made while building, so each session can start from the repo alone. Read it
+before any milestone.
 
 ## Status
 

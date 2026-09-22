@@ -9,7 +9,8 @@ Phase 1 asks one question: does any model beat naive baselines on real data, in 
 backtest proven free of look-ahead? "No" is a valid answer. Not a trading system
 and not financial advice.
 
-Status and every design decision: see [DECISIONS.md](DECISIONS.md).
+Spec: [docs/spec.md](docs/spec.md). Research: [docs/research.md](docs/research.md).
+Status and every decision made while building: [DECISIONS.md](DECISIONS.md).
 
 ## Quick start
 
@@ -145,5 +146,6 @@ tests/
                       trend reversal with variance jump
   fixtures/           one bad CSV per rule
 configs/phase1.yaml   the real Phase 1 series
+docs/                 spec and research (snapshots of the Claude Docs pages)
 examples/             synthetic stand-ins so the CLI runs out of the box
 ```
