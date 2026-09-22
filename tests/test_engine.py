@@ -214,3 +214,29 @@ def test_explicit_plan_is_respected():
     plan = make_origins(len(series.y), scfg)
     _, used = run_backtest(series, scfg, cfg, "rid", plan=plan)
     assert used is plan
+
+
+class HugeReturn(Naive):
+    name = "huge"
+
+    def _predict(self, h):
+        mean, sd = super()._predict(h)
+        return mean * 0 + 50.0, sd  # 50 log points a day: the price path overflows
+
+
+def test_non_finite_implied_price_is_a_contract_failure():
+    prices = gbm_prices(n=700, seed=5)
+    df = to_frame(prices, "trading_days", "2020-01-01", unique_id="s")
+    cfg, scfg, series = setup(
+        df,
+        freq="trading_days",
+        target="returns",
+        H=20,
+        window="expanding",
+        initial_window=250,
+        n_test_origins=40,
+    )
+    f = run_backtest(series, scfg, cfg, "rid", factories={"huge": lambda m: HugeReturn()})[0]
+    fr = f.frame()
+    assert (fr["status"] == "failed").all()
+    assert fr["error"].str.contains("overflows").all()

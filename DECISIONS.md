@@ -11,8 +11,8 @@ each weekend session can start from the repo alone. Read it before any milestone
 |---|---|---|
 | M1 | Repo, config, adapters, validation, fixtures, synthetic DGPs, `forecast validate` | Done (22 Sep 2026) |
 | M2 | Transforms (incl. LogReturn), return and level baselines, origins, engine, store, `forecast run` | Done (22 Sep 2026) |
-| M3 | Leakage tests L1, L2, L4, L5 | Next |
-| M4 | Statistical models (AR(p) on returns; ETS, SARIMA, Theta for the control), combination | |
+| M3 | Leakage tests L1, L2, L4, L5 | Done (22 Sep 2026) |
+| M4 | Statistical models (AR(p) on returns; ETS, SARIMA, Theta for the control), combination | Next |
 | M5 | Metrics and tests (DM-HLN, Holm, Kupiec, MCS, Pesaran-Timmermann, skill bootstrap) | |
 | M6 | Diagnostics, report, CLI `run` and `report` | |
 | M7 | Known-answer acceptance, L3 canary, simulation conformance | |
@@ -90,11 +90,26 @@ Choices the spec left open or where two parts of it disagree. Each says where it
 | M2-15 | Parallelism: joblib (loky) over folds when n_jobs is not 1; a test checks serial and parallel stores match. M2 models use no random numbers, so SeedSequence wiring (D7) arrives with the first stochastic component | Order-independent results without code that nothing uses yet |
 | M2-16 | Only FitError, TransformError and ForecastContractError become failed rows. NotFittedError and any other exception propagate | Spec: model failures are data; programming errors abort |
 
-## Notes for M3
+## M3 implementation decisions
 
-- L1 can build poisoned copies of a validated Series (values after t replaced by 1e9, NaN, a permutation) and call run_backtest with a one-origin OriginPlan; compare frames without fit_seconds.
-- L2's planted leaks are a transform fitted on the whole series and a model that peeks at y[t + 1]. The engine never passes the full series, so PeekModel needs a back door (for example, a closure over the full array in its factory).
-- L4 and L5 already have previews in test_engine.py (alignment) and test_selection.py (poisoned test rows); M3 should promote them to tests/test_leakage.py.
+| # | Decision | Why |
+|---|---|---|
+| M3-1 | The L1 harness lives in tests/leakage.py (poison, l1_check, the planted leaks) and is reused by later milestones. It compares every column except truth (y_true, y_true_missing, level_true) and timing: predictions, bounds, level_pred, mase_scale, n_train, n_outliers, transform, variant, status, error | A leak can surface in any of them, including a status flipping from ok to failed |
+| M3-2 | L1 samples 10 origins with a fixed seed across all roles, always including the last, and runs both windows and all three poisons at each. Series covered: a seasonal level series with interior gaps under boxcox, auto and log (with test-only models that use the transform), and a trading-day return series with closures | Covers interpolation, per-fold transform fitting, the rolling slice and the return path |
+| M3-3 | Transform modes are a registry (transforms.TRANSFORM_BUILDERS). Config still accepts only none, log, boxcox and auto; the leaky GlobalZScore is registered only inside its test | Spec L2: planted components exist only in the test suite |
+| M3-4 | L2's transform leak is observed through a model that forecasts 0 on the transformed scale. Naive and drift are unchanged by an affine transform, so they would hide a leaky z-score and L2 would pass for the wrong reason. Controls: the same model is clean with a slice-fitted transform, and each L2 run flags only the planted component | L2 must prove L1 can fail, not merely that it ran |
+| M3-5 | Best-baseline selection exists now (L5 needs it): per (series, window), the lowest mean dev MASE over all h among the baselines, with SMA entered once as its dev-chosen sma_k; ties go alphabetically. Recorded in manifest.json. M5 may refine it to per-horizon if the report needs that | Leakage source 11: the reference for relative MAE is chosen on dev only |
+| M3-6 | L5 poisons every numeric column of the test rows (NaN, 1e9, -1e9, 0) and requires identical SMA and best-baseline choices. A positive control shows that poisoning dev rows does change the choice | Without the control, L5 could pass vacuously |
+| M3-7 | A return forecast whose implied price path overflows is a ForecastContractError | Found while building L2: an "ok" row carried an infinite level_pred |
+| M3-8 | Manual mutation check (not in CI), run 22 Sep 2026. Four leaks planted in the real engine all fail the leakage suite: slice includes t + 1 (10 tests fail), MASE scale from the full series (8), Box-Cox lambda seeing the next value (1), selection reading every role (4). The unmodified code passes all 17 | Evidence that the suite guards the engine itself, not only the planted test models. Worth repeating after engine changes |
+
+L3 (random-walk canary) is M7; P1 (gate.yaml pre-registration) is M8.
+
+## Notes for M4
+
+- Add every new model and transform path to `honest_factories` in tests/test_leakage.py so L1 covers it. STL inside each fold (leakage source 7) and KPSS / seasonal tests inside model selection (source 8) are exactly what L1 will catch if done globally.
+- M4 adds statsmodels. Keep L1 at 10 origins; statsmodels fits are slower, so parametrize over a short series if runtime grows past the 30 s unit budget.
+- Combination membership (ETS-auto, SARIMA, Theta) is fixed in code before any run (leakage source 11); AR(p) on returns picks p by AICc inside the fold.
 
 ## Open items for later milestones
 

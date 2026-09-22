@@ -201,7 +201,12 @@ def _run_fold(
                 mean = tr.inverse(mean)
                 lo = {k: tr.inverse(v) for k, v in lo.items()}
                 hi = {k: tr.inverse(v) for k, v in hi.items()}
-            level_pred = lr.inverse(mean) if lr is not None else nan
+            level_pred = nan
+            if lr is not None:
+                with np.errstate(over="ignore"):
+                    level_pred = lr.inverse(mean)
+                if not np.isfinite(level_pred).all():
+                    raise ForecastContractError("implied price path overflows (non-finite)")
             variant = str(res.info.get("variant", ""))
             emit(
                 name,

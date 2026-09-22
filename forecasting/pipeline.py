@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from forecasting.backtest.engine import run_backtest
-from forecasting.backtest.selection import select_sma_k
+from forecasting.backtest.selection import select_best_baseline, select_sma_k
 from forecasting.backtest.store import ForecastStore, content_hash
 from forecasting.config import RunConfig, SeriesConfig, git_sha, run_id
 from forecasting.data.adapters import Fetcher, load_series
@@ -124,7 +124,10 @@ def run(cfg: RunConfig, validated: Validated, force: bool = False) -> RunResult:
         "config": json.loads(cfg.to_canonical_json()),
         "data_hashes": {s.unique_id: s.data_hash for s in series},
         "plans": plans,
-        "selections": {"sma": select_sma_k(frame)},
+        "selections": {
+            "sma": select_sma_k(frame),
+            "best_baseline": select_best_baseline(frame),
+        },
         "rows": {"total": len(frame), **{k: int(v) for k, v in counts.items()}},
         "content_hash": content_hash(frame),
         "gate": gate_status(cfg),

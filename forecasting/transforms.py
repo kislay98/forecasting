@@ -8,6 +8,7 @@ at the origin, which is what makes these leak-free (leakage sources 4, 5, 6).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol, Self
 
 import numpy as np
@@ -123,19 +124,29 @@ def variance_grows_with_level(y: pd.Series, m: int) -> bool:
     return bool(slope > 0.5)
 
 
+def _auto(y: pd.Series, m: int) -> Transform:
+    if (y <= 0).any():
+        return Identity().fit(y)
+    return Log().fit(y) if variance_grows_with_level(y, m) else Identity().fit(y)
+
+
+# Mode name -> builder(slice, m) returning a fitted transform. Config only accepts the
+# four modes below; the leakage tests register a deliberately leaky one here (L2).
+TRANSFORM_BUILDERS: dict[str, Callable[[pd.Series, int], Transform]] = {
+    "none": lambda y, m: Identity().fit(y),
+    "log": lambda y, m: Log().fit(y),
+    "boxcox": lambda y, m: BoxCox().fit(y),
+    "auto": _auto,
+}
+
+
 def select_transform(y: pd.Series, mode: str, m: int) -> Transform:
     """Choose and fit the variance transform on the slice. Raises TransformError on failure."""
-    if mode == "none":
-        return Identity().fit(y)
-    if mode == "log":
-        return Log().fit(y)
-    if mode == "boxcox":
-        return BoxCox().fit(y)
-    if mode == "auto":
-        if (y <= 0).any():
-            return Identity().fit(y)
-        return Log().fit(y) if variance_grows_with_level(y, m) else Identity().fit(y)
-    raise ValueError(f"unknown transform mode {mode!r}")
+    try:
+        builder = TRANSFORM_BUILDERS[mode]
+    except KeyError:
+        raise ValueError(f"unknown transform mode {mode!r}") from None
+    return builder(y, m)
 
 
 def transform_label(tr: Transform) -> str:

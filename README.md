@@ -99,6 +99,19 @@ Validation never changes a value. It refuses data it cannot evaluate honestly.
 Each rule has a bad fixture in `tests/fixtures/` (regenerate with
 `uv run python tests/fixtures/make_fixtures.py`).
 
+## Leakage tests
+
+`tests/test_leakage.py` runs on every push:
+
+| Test | What it proves |
+|---|---|
+| L1 future poisoning | Replacing every value after an origin (1e9, NaN, a permutation) leaves all forecasts, intervals and fold facts unchanged |
+| L2 planted leaks | A model that peeks at the next value, and a transform fitted on the whole series, are both caught by L1, and only they are |
+| L4 alignment | Origins, targets and periods line up exactly, including trading-day closures and returns across them |
+| L5 test quarantine | SMA-window and best-baseline choices are identical when every test row is poisoned |
+
+The harness in `tests/leakage.py` is reused for every new model.
+
 ## Layout
 
 ```
