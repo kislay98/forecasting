@@ -24,8 +24,20 @@ ROLES = ["warmup"] * 3 + ["dev"] * 5 + ["test"] * 14
 H = 3
 
 
-def toy_frame(target: str = "level", seed: int = 0) -> pd.DataFrame:
-    """One series, one window, every role. y is a noisy trend; 'good' is y + small noise."""
+def toy_frame(
+    target: str = "level", seed: int = 0, windows: tuple[str, ...] = ("expanding",)
+) -> pd.DataFrame:
+    """One series, every role. y is a noisy trend; 'good' is y + small noise. Test folds
+    carry residual diagnostics; a rolling window, if asked for, is the same forecasts
+    plus noise."""
+    frames = [_toy_window(target, seed, w, i) for i, w in enumerate(windows)]
+    store = ForecastStore(LEVELS)
+    for df in frames:
+        store.append(df)
+    return store.frame()
+
+
+def _toy_window(target: str, seed: int, window: str, k: int) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     n = len(ROLES) + H + 1
     if target == "returns":
@@ -48,25 +60,29 @@ def toy_frame(target: str = "level", seed: int = 0) -> pd.DataFrame:
                 preds["zero_return"] = 0.0
                 preds["mean_return"] = y[: t + 1].mean()
                 del preds["naive"], preds["drift"]
+            diag_rng = np.random.default_rng([seed, t, k])
             for model, yp in preds.items():
+                yp = yp + k * rng.normal(0, 0.3 if target == "level" else 0.003)
                 has_iv = model != "combination"
+                test = role == "test" and has_iv
                 rows.append(
                     {
-                        "run_id": "toy", "unique_id": "s", "model": model, "window": "expanding",
+                        "run_id": "toy", "unique_id": "s", "model": model, "window": window,
                         "origin_t": t, "origin_period": str(t), "origin_role": role, "h": h,
                         "target_period": str(t + h), "y_true": yt, "y_true_missing": False,
                         "y_pred": yp,
                         "lo_80": yp - 1.0 if has_iv else np.nan, "hi_80": yp + 1.0 if has_iv else np.nan,
                         "lo_95": yp - 2.0 if has_iv else np.nan, "hi_95": yp + 2.0 if has_iv else np.nan,
                         "level_true": np.nan, "level_pred": np.nan, "mase_scale": 1.0,
-                        "n_train": t + 1, "n_outliers": 0, "transform": "none", "variant": "",
+                        "n_train": t + 1, "n_outliers": 0, "n_resid": 40 if test else 0,
+                        "lb_p": diag_rng.uniform() if test else np.nan, "lb_p_2m": np.nan,
+                        "arch_p": diag_rng.uniform() if test else np.nan,
+                        "transform": "log" if model in ("good", "combination") else "none",
+                        "variant": "",
                         "fit_seconds": 0.0, "status": "ok", "error": "",
                     }
                 )  # fmt: skip
-    df = pd.DataFrame(rows)[[c for c, _ in columns_for(LEVELS)]]
-    store = ForecastStore(LEVELS)
-    store.append(df)
-    return store.frame()
+    return pd.DataFrame(rows)[[c for c, _ in columns_for(LEVELS)]]
 
 
 def toy_manifest(target: str = "level", seed: int = 1, reference: str = "sma_3") -> dict:
@@ -77,8 +93,8 @@ def toy_manifest(target: str = "level", seed: int = 1, reference: str = "sma_3")
             "series": [{"id": "s", "m": 1, "H": H, "target": target, "decision_horizons": [1, 3]}],
         },
         "selections": {
-            "sma": {"s": {"expanding": {"model": "sma_3", "k": 3}}},
-            "best_baseline": {"s": {"expanding": {"model": ref}}},
+            "sma": {"s": {w: {"model": "sma_3", "k": 3} for w in ("expanding", "rolling")}},
+            "best_baseline": {"s": {w: {"model": ref} for w in ("expanding", "rolling")}},
         },
     }
 
@@ -134,13 +150,16 @@ def test_point_metrics_match_a_direct_computation():
         assert row["reference"] == "naive"
 
 
-def test_holm_covers_only_test_horizons_and_non_reference_models():
+def test_holm_covers_only_test_horizons_and_candidate_models():
+    """RQ1's family: every (candidate, test horizon). Baselines keep their raw DM p-values
+    but are not in the family, so they cannot dilute it (M6 revises M5-12)."""
     p = quick(toy_frame(), toy_manifest()).point
     fam = p["dm_p_better_holm"].notna()
     assert set(p.loc[fam, "h"]) == {1, 3}  # decision horizons
-    assert "sma" not in set(p.loc[fam, "model"])
+    assert set(p.loc[fam, "model"]) == {"good", "combination"}
     assert (p.loc[fam, "dm_p_better_holm"] >= p.loc[fam, "dm_p_better"]).all()
-    assert fam.sum() == 2 * 4  # 2 horizons x (naive, drift, good, combination)
+    assert fam.sum() == 2 * 2  # 2 horizons x (good, combination)
+    assert p.loc[p["model"] == "naive", "dm_p_better"].notna().all()
 
 
 def test_mcs_and_skill_have_the_a5_a6_shape():
@@ -224,8 +243,8 @@ def test_scoring_never_refits(monkeypatch):
 def _poison(frame: pd.DataFrame, roles: set[str], value: float) -> pd.DataFrame:
     g = frame.copy()
     hit = g["origin_role"].isin(roles)
-    num = ["y_true", "y_pred", "mase_scale", "level_true", "level_pred",
-           *[c for c in g.columns if c.startswith(("lo_", "hi_"))]]  # fmt: skip
+    num = ["y_true", "y_pred", "mase_scale", "level_true", "level_pred", "n_resid", "lb_p",
+           "lb_p_2m", "arch_p", *[c for c in g.columns if c.startswith(("lo_", "hi_"))]]  # fmt: skip
     for c in num:
         g.loc[hit, c] = value
     g.loc[hit, "y_true_missing"] = False
@@ -236,8 +255,9 @@ def _poison(frame: pd.DataFrame, roles: set[str], value: float) -> pd.DataFrame:
 @pytest.mark.parametrize("value", [np.nan, 1e9, -1e9, 0.0])
 def test_L5_no_metric_reads_dev_or_warmup_rows(target, value):
     """Poison every numeric column of the dev and warm-up rows: every table is identical."""
-    f, man = toy_frame(target), toy_manifest(target)
+    f, man = toy_frame(target, windows=("expanding", "rolling")), toy_manifest(target)
     clean = all_tables(quick(f, man))
+    assert all(len(t) for t in clean.values()), {k: len(t) for k, t in clean.items()}
     dirty = all_tables(quick(_poison(f, {"dev", "warmup"}, value), man))
     for name, t in clean.items():
         pd.testing.assert_frame_equal(t, dirty[name], obj=name)
@@ -311,3 +331,27 @@ def test_example_config_gives_a5_and_a6_tables(example_run):
     ib = s.interval_buckets
     assert set(ib["level"]) == {0.8, 0.95}
     assert {"coverage", "band_lo", "band_hi", "kupiec_p"} <= set(ib.columns)
+
+
+# ---------------------------------------------------------------- RQ4 to RQ6 tables
+
+
+def test_fold_tables_rq4_to_rq6():
+    """Residual shares come from one row per test fold; transforms count candidate folds;
+    the window gap pairs rolling with expanding; sub-periods split the test origins."""
+    f = toy_frame(windows=("expanding", "rolling"))
+    s = quick(f, toy_manifest())
+    res = s.residuals.set_index(["window", "model"])
+    test = f[(f["origin_role"] == "test") & (f["h"] == 1)]
+    good = test[(test["window"] == "expanding") & (test["model"] == "good")]
+    assert res.loc[("expanding", "good"), "n_origins"] == 14
+    assert res.loc[("expanding", "good"), "share_lb"] == pytest.approx((good["lb_p"] < 0.05).mean())
+    assert "combination" not in set(res.index.get_level_values("model"))  # no residuals
+    tr = s.transforms.set_index(["window", "transform"])
+    assert tr.loc[("expanding", "log"), "n_folds"] == 14
+    gap = s.window_gap
+    assert set(gap["h"]) == {1, 3} and set(gap["model"]) >= {"good", "naive", "sma"}
+    assert gap["ratio"].gt(0).all()
+    sub = s.subperiods
+    assert set(sub["block"]) == {1, 2, 3, 4} and set(sub["h"]) == {1, 3}
+    assert sub.groupby(["window", "model", "h"])["n"].sum().eq(14).all()

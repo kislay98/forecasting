@@ -15,10 +15,13 @@ Rules (spec: Metrics and statistics; scope update, Metrics row):
   is > 0). Return series get MAE and RMSE relative to the zero forecast, directional
   accuracy with Pesaran-Timmermann, and out-of-sample R^2 against mean_return.
 - DM-HLN runs at every h; Holm adjusts the one-sided "beats the reference" p-values
-  over every (model, test horizon) of a (series, window). Test horizons are the
-  decision horizons, else the last h of each bucket.
+  over every (candidate model, test horizon) of a (series, window). Candidates are the
+  models that are not baselines. Test horizons are the decision horizons, else the
+  last h of each bucket.
 - Interval metrics skip the combination and any model without bounds. The effective
   sample at h is n / h: coverage bands and Kupiec use it.
+- Fold facts (residual diagnostics, transforms) come from test rows with status ok,
+  one row per (series, window, model, origin), whether or not y_true is present.
 """
 
 from __future__ import annotations
@@ -31,7 +34,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from forecasting.backtest.selection import is_baseline
 from forecasting.backtest.store import ForecastStore, level_tag, levels_from_columns
+from forecasting.evaluation import diagnostics as dg
 from forecasting.evaluation import metrics as mt
 from forecasting.evaluation import tests as st
 
@@ -71,6 +76,10 @@ class Scores:
     mcs_buckets: pd.DataFrame  # MCS per (series, window, bucket, model)
     intervals: pd.DataFrame  # per (series, window, model, h, level)
     interval_buckets: pd.DataFrame  # per (series, window, model, bucket, level)
+    residuals: pd.DataFrame  # RQ4: per (series, window, model), share of origins rejecting
+    transforms: pd.DataFrame  # RQ6: per (series, window, transform), fold counts
+    window_gap: pd.DataFrame  # RQ5: per (series, model, test h), rolling vs expanding
+    subperiods: pd.DataFrame  # RQ5: per (series, window, model, test h, block)
 
 
 def series_labels(manifest: dict[str, Any]) -> dict[str, SeriesLabels]:
@@ -96,6 +105,16 @@ def scorable(frame: pd.DataFrame) -> pd.DataFrame:
         & frame["y_pred"].notna()
     )
     return frame[keep]
+
+
+def test_folds(frame: pd.DataFrame) -> pd.DataFrame:
+    """One row per (series, window, model, test origin) with status ok: fold facts."""
+    keep = (frame["origin_role"] == "test") & (frame["status"] == "ok")
+    keys = ["unique_id", "window", "model", "origin_t"]
+    return frame[keep].drop_duplicates(keys)
+
+
+test_folds.__test__ = False  # not a pytest test, despite the name
 
 
 def _selected(
@@ -124,11 +143,18 @@ def score(
     sel = manifest.get("selections", {})
     levels = levels_from_columns(frame.columns)
     rows_all = scorable(frame)
+    folds_all = test_folds(frame)
 
     parts: dict[str, list] = {k: [] for k in Scores.__dataclass_fields__}
+    collapsed: dict[str, list[pd.DataFrame]] = {}
+    for (uid, window), folds in folds_all.groupby(["unique_id", "window"], sort=True):
+        folds, _, _ = _selected(folds, sel, uid, window)
+        parts["residuals"].append(dg.residual_summary(folds))
+        parts["transforms"].append(dg.transform_counts(folds[~folds["model"].map(is_baseline)]))
     for (uid, window), rows in rows_all.groupby(["unique_id", "window"], sort=True):
         lab = labels[uid]
         rows, sma, ref = _selected(rows, sel, uid, window)
+        collapsed.setdefault(uid, []).append(rows)
         k = int(sma.split("_", 1)[1]) if sma else None
         parts["selections"].append(
             {"unique_id": uid, "window": window, "sma_model": sma, "sma_k": k, "reference": ref}
@@ -142,6 +168,11 @@ def score(
         ivals, ibuckets = ctx.intervals(rows)
         parts["intervals"].append(ivals)
         parts["interval_buckets"].append(ibuckets)
+        sub = dg.subperiods(rows, ref, lab.test_horizons)
+        if len(sub):
+            parts["subperiods"].append(sub.assign(**ctx.key)[[*ctx.key, *sub.columns]])
+    for uid, frames in collapsed.items():
+        parts["window_gap"].append(dg.window_gap(pd.concat(frames), labels[uid].test_horizons))
 
     out = {}
     for name, dfs in parts.items():
@@ -194,12 +225,21 @@ class _Ctx:
         recs, skills = [], []
         for h, g in rows.groupby("h", sort=True):
             h = int(h)
-            wide = {name: m.set_index("origin_t") for name, m in g.groupby("model", sort=True)}
-            mcs = self._mcs({name: w["y_true"] - w["y_pred"] for name, w in wide.items()}, h)
-            refw = wide.get(self.ref) if self.ref else None
-            meanw = wide.get("mean_return")
-            for name, w in wide.items():
-                y, yp = w["y_true"].to_numpy(), w["y_pred"].to_numpy()
+            # One (origin x model) array per column: pairing is a mask, not a join.
+            wide = g.pivot(
+                index="origin_t", columns="model", values=["y_true", "y_pred", "mase_scale"]
+            )
+            Y, P, S = (wide[c].to_numpy() for c in ("y_true", "y_pred", "mase_scale"))
+            names = list(wide["y_pred"].columns)
+            col = {name: i for i, name in enumerate(names)}
+            have = ~np.isnan(P)
+            E = np.abs(Y - P)
+            mcs = self._mcs(names, E, h)
+            ref = col.get(self.ref) if self.ref else None
+            mean = col.get("mean_return")
+            for name, i in col.items():
+                m = have[:, i]
+                y, yp = Y[m, i], P[m, i]
                 n = len(y)
                 rec = {
                     **self.key,
@@ -212,7 +252,7 @@ class _Ctx:
                     "n_eff": mt.n_effective(n, h),
                     "mae": mt.mae(y, yp),
                     "rmse": mt.rmse(y, yp),
-                    "mase": _nan_if_error(mt.mase, y, yp, w["mase_scale"].to_numpy()),
+                    "mase": _nan_if_error(mt.mase, y, yp, S[m, i]),
                     "bias": mt.bias(y, yp),
                     "wape": np.nan if returns else _nan_if_error(mt.wape, y, yp),
                     "smape": np.nan if returns else mt.smape(y, yp),
@@ -227,9 +267,15 @@ class _Ctx:
                         "dir_acc": pt.hit_rate,
                         "pt_stat": pt.stat,
                         "pt_p": pt.p_value,
-                        "r2_oos": self._paired(w, meanw, _r2),
+                        "r2_oos": np.nan,
                     }
-                rec |= self._versus_reference(name, w, refw, h, skills)
+                    if mean is not None:
+                        both = m & have[:, mean]
+                        if both.any():
+                            rec["r2_oos"] = _nan_if_error(
+                                mt.r2_oos, Y[both, i], P[both, i], P[both, mean]
+                            )
+                rec |= self._versus_reference(name, Y, P, have, i, ref, h, skills)
                 rec |= mcs.get(name, {"mcs_p": np.nan, "mcs_in": pd.NA})
                 recs.append(rec)
         point = pd.DataFrame(recs)
@@ -237,18 +283,7 @@ class _Ctx:
             point["dm_p_better_holm"] = self._holm(point)
         return point, pd.DataFrame(skills)
 
-    @staticmethod
-    def _paired(w: pd.DataFrame, other: pd.DataFrame | None, fn) -> float:
-        if other is None:
-            return np.nan
-        j = w[["y_true", "y_pred"]].join(other[["y_pred"]], rsuffix="_o", how="inner")
-        if j.empty:
-            return np.nan
-        return _nan_if_error(
-            fn, j["y_true"].to_numpy(), j["y_pred"].to_numpy(), j["y_pred_o"].to_numpy()
-        )
-
-    def _versus_reference(self, name, w, refw, h, skills) -> dict[str, Any]:
+    def _versus_reference(self, name, Y, P, have, i, ref, h, skills) -> dict[str, Any]:
         out = {
             "n_paired": 0,
             "rel_mae": np.nan,
@@ -256,18 +291,16 @@ class _Ctx:
             "dm_p": np.nan,
             "dm_p_better": np.nan,
         }
-        if refw is None:
+        if ref is None:
             return out
-        j = w[["y_true", "y_pred"]].join(refw[["y_pred"]], rsuffix="_ref", how="inner")
-        n = len(j)
+        both = have[:, i] & have[:, ref]
+        n = int(both.sum())
         out["n_paired"] = n
         if n == 0:
             return out
-        y = j["y_true"].to_numpy()
-        ea, er = np.abs(y - j["y_pred"].to_numpy()), np.abs(y - j["y_pred_ref"].to_numpy())
-        out["rel_mae"] = _nan_if_error(
-            mt.relative_mae, y, j["y_pred"].to_numpy(), j["y_pred_ref"].to_numpy()
-        )
+        y, yp, yr = Y[both, i], P[both, i], P[both, ref]
+        ea, er = np.abs(y - yp), np.abs(y - yr)
+        out["rel_mae"] = _nan_if_error(mt.relative_mae, y, yp, yr)
         if name == self.ref:
             return out
         if n > h:
@@ -292,26 +325,27 @@ class _Ctx:
         return out
 
     def _holm(self, point: pd.DataFrame) -> pd.Series:
-        fam = point["test_h"] & point["dm_p_better"].notna() & (point["model"] != self.ref)
+        """Holm over every (candidate, test horizon): RQ1's family."""
+        candidate = ~point["model"].map(is_baseline)
+        fam = point["test_h"] & point["dm_p_better"].notna() & candidate
         adj = pd.Series(np.nan, index=point.index)
         if fam.any():
             adj[fam] = st.holm(point.loc[fam, "dm_p_better"].to_numpy())
         return adj
 
-    def _mcs(self, errors: dict[str, pd.Series], h: int, tag: object = None) -> dict[str, dict]:
-        """MCS on absolute errors over the origins every model has; block length h."""
-        if len(errors) < 2:
+    def _mcs(self, names: list[str], E: np.ndarray, h: int, tag: object = None) -> dict:
+        """MCS on absolute errors E (origin x model) over the origins every model has;
+        block length h."""
+        if len(names) < 2:
             return {}
-        E = pd.DataFrame(errors).dropna()
+        E = E[~np.isnan(E).any(axis=1)]
         if len(E) < 2:
             return {}
         rng = st.child_rng(self.seed, "mcs", self.uid, self.window, tag if tag is not None else h)
-        res = st.model_confidence_set(
-            np.abs(E.to_numpy()), alpha=self.alpha, reps=self.mcs_reps, block=h, rng=rng
-        )
+        res = st.model_confidence_set(E, alpha=self.alpha, reps=self.mcs_reps, block=h, rng=rng)
         return {
             name: {"mcs_n": len(E), "mcs_p": float(p), "mcs_in": bool(inc)}
-            for name, p, inc in zip(E.columns, res.p_values, res.included, strict=True)
+            for name, p, inc in zip(names, res.p_values, res.included, strict=True)
         }
 
     def mcs_buckets(self, rows: pd.DataFrame) -> pd.DataFrame:
@@ -329,7 +363,7 @@ class _Ctx:
             losses = per.T.groupby(level="model").mean().T
             if losses.shape[1] < 2:
                 continue
-            res = self._mcs({c: losses[c] for c in losses.columns}, hs[-1], tag=f"bucket:{bname}")
+            res = self._mcs(list(losses.columns), losses.to_numpy(), hs[-1], tag=f"bucket:{bname}")
             for name, r in res.items():
                 recs.append(
                     {
@@ -401,10 +435,6 @@ class _Ctx:
         return pd.DataFrame(per_h), pd.DataFrame(per_b)
 
 
-def _r2(y, yp, yb) -> float:
-    return mt.r2_oos(y, yp, yb)
-
-
 def _interval_stats(g: pd.DataFrame, lo_c: str, hi_c: str, level: float, n_eff: float) -> dict:
     """Coverage with its binomial band, Kupiec on the effective sample, Winkler, width.
 
@@ -428,3 +458,36 @@ def _interval_stats(g: pd.DataFrame, lo_c: str, hi_c: str, level: float, n_eff: 
         "winkler": mt.winkler(y, lo, hi, level),
         "width": mt.mean_width(lo, hi),
     }
+
+
+def pairwise(
+    frame: pd.DataFrame, manifest: dict[str, Any], uid: str, window: str, model: str, other: str
+) -> pd.DataFrame:
+    """One named comparison at every h: model vs other on the test origins both have.
+
+    Same rows and SMA collapse as score(). Returns h, n, n_eff, rel_mae (MAE of model /
+    MAE of other), and DM-HLN on |e_model| - |e_other| (dm_p two-sided, dm_p_better
+    one-sided: model is more accurate). Used for the SMA finding (spec: Model set).
+    """
+    rows = scorable(frame)
+    rows = rows[(rows["unique_id"] == uid) & (rows["window"] == window)]
+    rows, _, _ = _selected(rows, manifest.get("selections", {}), uid, window)
+    recs = []
+    for h, g in rows.groupby("h", sort=True):
+        w = {name: m.set_index("origin_t") for name, m in g.groupby("model")}
+        if model not in w or other not in w:
+            continue
+        j = w[model][["y_true", "y_pred"]].join(w[other][["y_pred"]], rsuffix="_o", how="inner")
+        n, h = len(j), int(h)
+        if n == 0:
+            continue
+        y = j["y_true"].to_numpy()
+        ea, eb = np.abs(y - j["y_pred"].to_numpy()), np.abs(y - j["y_pred_o"].to_numpy())
+        rel = float(ea.mean() / eb.mean()) if eb.sum() > 0 else np.nan
+        rec = {"h": h, "n": n, "n_eff": n / h, "rel_mae": rel}
+        rec |= {"dm_stat": np.nan, "dm_p": np.nan, "dm_p_better": np.nan}
+        if n > h:
+            dm = st.dm_hln(ea, eb, h)
+            rec |= {"dm_stat": dm.stat, "dm_p": dm.p_value, "dm_p_better": dm.p_better}
+        recs.append(rec)
+    return pd.DataFrame(recs)

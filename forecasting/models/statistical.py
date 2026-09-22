@@ -323,6 +323,11 @@ class SARIMAAuto(StatModel):
             lower[lv], upper[lv] = ci[:, 0], ci[:, 1]
         return mean, lower, upper
 
+    def _residuals(self) -> np.ndarray:
+        # The first d + D m residuals come from the diffuse initialisation, not the model.
+        burn = int(getattr(self._res, "loglikelihood_burn", 0))
+        return np.asarray(self._res.resid, dtype=float)[burn:]
+
 
 # ---------------------------------------------------------------- Theta
 
@@ -363,7 +368,7 @@ class Theta(StatModel):
         return mean, lower, upper
 
     def _residuals(self) -> np.ndarray:
-        return np.array([])
+        return np.array([])  # statsmodels' ThetaModel exposes no in-sample residuals
 
 
 # ---------------------------------------------------------------- AR(p) on returns
@@ -434,6 +439,10 @@ class STLAdjusted(StatModel):
             {lv: r.lower[lv] + s for lv in r.lower},
             {lv: r.upper[lv] + s for lv in r.upper},
         )
+
+    def _residuals(self) -> np.ndarray:
+        # The inner model's one-step residuals on the adjusted series, not the STL remainder.
+        return self.inner.residuals()
 
 
 def seasonal_or_stl(make: Callable[[int], StatModel], m: int) -> StatModel:

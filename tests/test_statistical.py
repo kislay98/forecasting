@@ -298,3 +298,41 @@ def test_returns_series_runs_ar():
     assert len(ar) > 0 and (ar["status"] == "ok").all()
     assert ar["variant"].str.match(r"AR\(\d\)").all()
     assert set(ar["origin_role"]) == {"dev", "test"}
+
+
+# ---------------------------------------------------------------- residuals (RQ4)
+
+
+def test_sarima_residuals_drop_the_diffuse_burn_in():
+    """With d + D m differences, SARIMAX's first residuals come from the initialisation
+    (y itself, then y minus a partial seasonal difference). They are dropped."""
+    s = SARIMAAuto(12).fit(SEASONAL)
+    burn = int(s._res.loglikelihood_burn)
+    assert burn >= 12  # D = 1 on this series
+    r = s.residuals()
+    assert len(r) == len(SEASONAL) - burn
+    np.testing.assert_allclose(r, np.asarray(s._res.resid)[burn:])
+    assert np.abs(r).max() < 10 * np.abs(r).std() + 1e-9  # no initialisation spikes
+
+
+def test_stl_wrapper_residuals_are_the_inner_models():
+    y = pd.Series(seasonal_ar1(n=160, m=52, seed=2))
+    m = seasonal_or_stl(lambda k: ETSAuto(k), 52).fit(y)
+    np.testing.assert_array_equal(m.residuals(), m.inner.residuals())
+    assert len(m.residuals()) == len(y)
+
+
+def test_engine_records_residual_diagnostics_at_test_origins_only():
+    cfg, scfg, series = setup(n=80, models=["naive", "ses", "theta"])
+    f = run_backtest(series, scfg, cfg, "rid")[0].frame()
+    test = f["origin_role"] == "test"
+    assert (f.loc[~test, "n_resid"] == 0).all() and f.loc[~test, "lb_p"].isna().all()
+    for name in ("naive", "ses"):
+        rows = f[test & (f["model"] == name)]
+        assert (rows["n_resid"] > 0).all() and rows["lb_p"].between(0, 1).all()
+        assert rows["arch_p"].between(0, 1).all()
+    theta = f[test & (f["model"] == "theta")]
+    assert (theta["n_resid"] == 0).all() and theta["lb_p"].isna().all()  # no residuals
+    # one value per fold, repeated on each h row
+    per_fold = f[test].groupby(["model", "origin_t"])["lb_p"].nunique(dropna=False)
+    assert (per_fold == 1).all()

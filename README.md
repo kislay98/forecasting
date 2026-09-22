@@ -19,9 +19,10 @@ Needs [uv](https://docs.astral.sh/uv/). uv installs Python 3.11 if you lack it.
 ```bash
 uv sync                                        # create .venv and install
 uv run forecast validate examples/config.yaml  # validate the example series
-uv run forecast run examples/config.yaml       # backtest every model, write the store
+uv run forecast run examples/config.yaml       # backtest every model, write store + report
+uv run forecast report examples/runs/<run_id>  # rebuild the report from the store, no refits
 uv run pytest                                  # all tests (CI runs these)
-uv run pytest -m "not slow"                    # quick loop, about 30 s
+uv run pytest -m "not slow"                    # quick loop, about 35 s
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -87,23 +88,39 @@ series (m > 24) ets and sarima run on an STL-adjusted series. Statistical models
 warm-up origins unless `warmup_models: all`; `sarima_search: grid` fits the full SARIMA
 grid instead of the stepwise search.
 
-## Scoring a run
+## The report
 
-Metrics and tests are computed from the store and manifest, never by refitting (M5).
-The report and a CLI command arrive in M6; until then, from Python:
+`forecast run` ends by writing `runs/<run_id>/report/report.md` with three PNGs per
+series in `report/figures/`: relative MAE by horizon, the skill curve with its CI and
+h*, and interval coverage with binomial bands. `forecast report RUN_DIR` (or the
+config) rebuilds it from the store and manifest; nothing is refitted.
+
+For every series the report gives a verdict on each research question, with the
+tables behind it, and applies the Phase 1 exit table (provisional until gate.yaml is
+enforced in M8):
+
+| Question | Answered by |
+|---|---|
+| RQ1 does any model beat the best baseline? | Relative MAE, DM-HLN (Holm over every candidate and test horizon), MCS, per h |
+| RQ2 predictable horizon h* | Skill SS(h) with a moving-block bootstrap CI |
+| RQ3 are intervals calibrated? | Coverage per bucket with binomial bands, Kupiec |
+| RQ4 are residuals autocorrelated or heteroskedastic? | Share of test origins where Ljung-Box or ARCH-LM rejects |
+| RQ5 stable, or does rolling beat expanding? | Rolling vs expanding MAE with DM-HLN; four sub-periods |
+| RQ6 is a transform needed? | The transform chosen per test fold, with counts |
+
+Only test origins with status ok and a present actual are scored. "sma" is the
+dev-chosen window, the reference is the dev-chosen best baseline, and where a question
+needs one model the report speaks for the dev-chosen best candidate. From Python:
 
 ```python
 from forecasting.evaluation.scoring import score_run
 
 s = score_run("examples/runs/<run_id>")
 s.point  # per series, window, model, h: MAE, MASE, relative MAE, DM-HLN, Holm, MCS
-s.skill  # SS(h) = 1 - relative MAE with its block-bootstrap CI
-s.h_star  # predictable horizon per model
-s.intervals  # coverage with binomial band, Kupiec, Winkler (per h; interval_buckets per bucket)
+s.skill, s.h_star  # SS(h) with its CI; predictable horizon per model
+s.intervals, s.interval_buckets  # coverage with binomial band, Kupiec, Winkler
+s.residuals, s.window_gap, s.subperiods, s.transforms  # RQ4 to RQ6
 ```
-
-Only test origins with status ok and a present actual are scored. "sma" is the
-dev-chosen window and the reference is the dev-chosen best baseline.
 
 ## Data rules
 
@@ -156,13 +173,15 @@ forecasting/
   backtest/splits.py  origins and dev / test roles
   backtest/engine.py  run_backtest: the only code that slices data
   backtest/store.py   ForecastStore (Parquet) and content hash
-  backtest/selection.py  SMA window chosen on dev origins
+  backtest/selection.py  SMA window, best baseline and best candidate, dev origins only
   evaluation/metrics.py  MAE, RMSE, MASE, relative MAE, WAPE, sMAPE, MAPE, bias,
                       coverage and band, Winkler, directional accuracy, OOS R^2, buckets
   evaluation/tests.py DM-HLN, Holm, Kupiec, Pesaran-Timmermann, MCS, skill bootstrap, h*
   evaluation/scoring.py  score / score_run: tidy per-horizon tables from a run
+  evaluation/diagnostics.py  Ljung-Box, ARCH-LM, window gap, sub-periods, transforms
+  evaluation/report.py  RQ1-RQ6 verdicts, exit decision, tables, 3 plots, markdown
   pipeline.py         validate all, run, manifest
-  cli.py              forecast validate | run
+  cli.py              forecast validate | run | report
 tests/
   synthetic.py        seeded DGPs: random walk, local linear trend, seasonal AR(1),
                       trend reversal with variance jump

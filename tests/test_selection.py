@@ -67,3 +67,53 @@ def test_ties_go_to_the_smaller_window():
 def test_no_sma_rows_gives_empty_selection():
     f = frame()
     assert select_sma_k(f[f["origin_role"] != "dev"]) == {}
+
+
+# ---------------------------------------------------------------- best candidate
+
+
+def candidate_frame() -> pd.DataFrame:
+    """The M5 toy store: baselines, 'good' (y + small noise, bounds), 'combination'
+    (y + larger noise, no bounds)."""
+    from tests.test_scoring import toy_frame
+
+    return toy_frame()
+
+
+def test_best_candidate_is_ranked_on_dev_and_skips_baselines():
+    from forecasting.backtest.selection import select_best_candidate
+
+    sel = select_best_candidate(candidate_frame())["s"]["expanding"]
+    assert sel["ranking"] == ["good", "combination"]
+    assert sel["model"] == "good" and sel["with_intervals"] == "good"
+    assert set(sel["scores"]) == {"good", "combination"}
+
+
+def test_best_candidate_with_intervals_skips_the_combination():
+    from forecasting.backtest.selection import select_best_candidate
+
+    f = candidate_frame()
+    dev = f["origin_role"] == "dev"
+    f.loc[dev & (f["model"] == "combination"), "y_pred"] = f.loc[
+        dev & (f["model"] == "combination"), "y_true"
+    ]  # a perfect combination on dev
+    sel = select_best_candidate(f)["s"]["expanding"]
+    assert sel["model"] == "combination" and sel["with_intervals"] == "good"
+
+
+def test_L5_best_candidate_ignores_test_rows():
+    from forecasting.backtest.selection import select_best_candidate
+
+    f = candidate_frame()
+    clean = select_best_candidate(f)
+    for value in (np.nan, 1e9, -1e9, 0.0):
+        g = f.copy()
+        test = g["origin_role"] == "test"
+        for c in ["y_true", "y_pred", "mase_scale", "lo_80", "hi_80", "lo_95", "hi_95"]:
+            g.loc[test, c] = value
+        assert select_best_candidate(g) == clean
+    # positive control: dev rows do matter
+    g = f.copy()
+    hit = (g["origin_role"] == "dev") & (g["model"] == "good")
+    g.loc[hit, "y_pred"] = 1e9
+    assert select_best_candidate(g)["s"]["expanding"]["model"] == "combination"

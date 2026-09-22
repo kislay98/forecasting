@@ -4,6 +4,10 @@ select_sma_k picks the SMA window per (series, window) by mean MASE over all h o
 origins, then it is frozen: the report treats 'sma' as that sma_k.
 select_best_baseline picks the reference for relative MAE the same way, among the
 baselines with SMA represented by its chosen sma_k.
+select_best_candidate ranks the non-baseline models (statistical models and the
+combination) the same way. The report speaks for the top one when a research question
+needs a single model (h*, calibration, residuals), so that choice is never made on test
+results either.
 Test rows are dropped before anything is computed, so poisoning them cannot change
 either choice.
 """
@@ -73,6 +77,39 @@ def select_best_baseline(frame: pd.DataFrame) -> dict[str, dict[str, dict]]:
         out.setdefault(uid, {})[window] = {
             "model": best,
             "dev_mase": float(s[best]),
+            "scores": {n: float(v) for n, v in sorted(s.items())},
+        }
+    return out
+
+
+def is_baseline(model: str) -> bool:
+    """Baselines, including every sma_k and the collapsed name 'sma'."""
+    return model in BASELINES or model.startswith("sma_")
+
+
+def select_best_candidate(frame: pd.DataFrame) -> dict[str, dict[str, dict]]:
+    """{unique_id: {window: {"model", "dev_mase", "ranking", "scores"}}}.
+
+    Candidates are the models that are not baselines. ranking lists them by mean dev
+    MASE over all h, ties alphabetical; model is the first. with_intervals is the first
+    candidate whose dev rows carry interval bounds (the combination has none).
+    """
+    dev = _scorable(dev_rows(frame))
+    dev = dev[~dev["model"].map(is_baseline)]
+    out: dict[str, dict[str, dict]] = {}
+    bounds = [c for c in dev.columns if c.startswith("lo_")]
+    for (uid, window), rows in dev.groupby(["unique_id", "window"]):
+        s = _dev_mase(rows).droplevel([0, 1])
+        ranking = sorted(s.index, key=lambda n: (s[n], n))
+        has_iv = {
+            name: bool(bounds) and bool(g[bounds].notna().all(axis=1).any())
+            for name, g in rows.groupby("model")
+        }
+        out.setdefault(uid, {})[window] = {
+            "model": ranking[0],
+            "dev_mase": float(s[ranking[0]]),
+            "ranking": ranking,
+            "with_intervals": next((n for n in ranking if has_iv[n]), None),
             "scores": {n: float(v) for n, v in sorted(s.items())},
         }
     return out

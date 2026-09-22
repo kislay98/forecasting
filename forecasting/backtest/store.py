@@ -6,7 +6,9 @@ Parquet nulls. The schema is explicit so the file is typed and reproducible.
 
 Columns beyond the spec: level_true / level_pred (return series only: the price the
 return path implies), mase_scale (MASE denominator from the origin's own training
-slice, leakage source 9), n_train and n_outliers (fold facts for the report).
+slice, leakage source 9), n_train and n_outliers (fold facts for the report), and the
+residual diagnostics of test folds (RQ4): n_resid, lb_p, lb_p_2m, arch_p, from the
+model's one-step in-sample residuals while it is fitted (0 and nulls elsewhere).
 """
 
 from __future__ import annotations
@@ -40,6 +42,10 @@ TAIL_COLUMNS: list[tuple[str, str]] = [
     ("mase_scale", "float"),
     ("n_train", "int"),
     ("n_outliers", "int"),
+    ("n_resid", "int"),
+    ("lb_p", "float"),
+    ("lb_p_2m", "float"),
+    ("arch_p", "float"),
     ("transform", "str"),
     ("variant", "str"),
     ("fit_seconds", "float"),

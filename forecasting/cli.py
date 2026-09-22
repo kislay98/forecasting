@@ -1,10 +1,12 @@
 """Command line entry points. No logic here beyond printing (spec: cli).
 
   forecast validate config.yaml   print a ValidationReport per series
-  forecast run config.yaml        validate, backtest, write runs/<run_id>/
+  forecast run config.yaml        validate, backtest, write runs/<run_id>/ and its report
+  forecast report RUN_DIR         rebuild runs/<run_id>/report/ from the store; no refits
+  forecast report config.yaml     the same, for the run this config and data map to
 
-Exit codes: 0 success, 1 a series failed a data rule, 2 the config or a source
-could not be read.
+Exit codes: 0 success, 1 a series failed a data rule, 2 the config, a source or a run
+directory could not be read.
 """
 
 from __future__ import annotations
@@ -14,7 +16,8 @@ import sys
 from pathlib import Path
 
 from forecasting.config import load_config
-from forecasting.errors import AdapterError, ConfigError
+from forecasting.errors import AdapterError, ConfigError, SchemaError
+from forecasting.evaluation.report import report_run
 from forecasting.pipeline import compute_run_id, run, validate_all
 
 
@@ -75,6 +78,8 @@ def cmd_run(config_path: Path, force: bool = False, out=None) -> int:
         print(
             f"run {result.run_id} already exists at {result.path} (use --force to redo)", file=out
         )
+        if not (result.path / "report" / "report.md").exists():
+            return _report(result.path, out)
         return 0
     print(f"run_id: {result.run_id}  (git {man['git'][:12]})", file=out)
     for uid, plan in man["plans"].items():
@@ -94,6 +99,7 @@ def cmd_run(config_path: Path, force: bool = False, out=None) -> int:
         file=out,
     )
     print(f"store: {result.path / 'forecasts.parquet'}", file=out)
+    print(f"report: {report_run(result.path)}", file=out)
     if not man["gate"]["present"]:
         print(
             "note: no gate.yaml next to the config. Treat this run as exploratory and do not "
@@ -101,6 +107,39 @@ def cmd_run(config_path: Path, force: bool = False, out=None) -> int:
             file=out,
         )
     return 0
+
+
+def _report(run_dir: Path, out) -> int:
+    try:
+        path = report_run(run_dir)
+    except SchemaError as e:
+        print(
+            f"cannot read {run_dir}: {e}. Written by older code? Redo it: forecast run --force",
+            file=out,
+        )
+        return 2
+    print(f"report: {path}", file=out)
+    return 0
+
+
+def cmd_report(target: Path, out=None) -> int:
+    """Rebuild the report of a run directory, or of the run a config maps to."""
+    out = out or sys.stdout
+    if target.is_dir():
+        run_dir = target
+    else:
+        cfg, validated = _load(target, out)
+        if validated is None:
+            return 2
+        if validated.failed:
+            _print_validation(validated, out, reports=False)
+            return 1
+        rid, _ = compute_run_id(cfg, [s for _, s, _ in validated.ok])
+        run_dir = cfg.output_path / rid
+    if not (run_dir / "manifest.json").exists():
+        print(f"no run at {run_dir}: run `forecast run` first", file=out)
+        return 2
+    return _report(run_dir, out)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -111,11 +150,15 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="validate, backtest every series, write the forecast store")
     r.add_argument("config", type=Path)
     r.add_argument("--force", action="store_true", help="redo a run whose directory exists")
+    p = sub.add_parser("report", help="rebuild a run's report from its store (no refits)")
+    p.add_argument("target", type=Path, help="a run directory, or the config of the run")
     args = parser.parse_args(argv)
     if args.command == "validate":
         return cmd_validate(args.config)
     if args.command == "run":
         return cmd_run(args.config, force=args.force)
+    if args.command == "report":
+        return cmd_report(args.target)
     return 2  # pragma: no cover
 
 

@@ -9,7 +9,9 @@ For each (window, origin), in order:
   5 per model  fresh instance from its factory; variance transform (auto, log, Box-Cox)
                fitted on the slice only for models with uses_transform; fit; predict;
                contract check; back-transform points and bounds
-  6 record     one row per h with truth taken from the full series by position
+  6 diagnose   test origins only: Ljung-Box and ARCH-LM on the fitted model's one-step
+               in-sample residuals (RQ4), recorded on the fold's rows
+  7 record     one row per h with truth taken from the full series by position
 
 Models and transforms never receive anything after position t. Model failures
 (FitError, TransformError, contract breaks) are data: rows with status 'failed'.
@@ -32,6 +34,7 @@ from forecasting.backtest.store import ForecastStore, level_tag
 from forecasting.config import RunConfig, SeriesConfig
 from forecasting.data.validate import Series
 from forecasting.errors import FitError, ForecastContractError, TransformError
+from forecasting.evaluation.diagnostics import residual_tests
 from forecasting.models.base import ModelFactory, check_result
 from forecasting.models.combination import MEMBERS, combine
 from forecasting.models.registry import build_factories
@@ -44,6 +47,7 @@ from forecasting.transforms import (
 )
 
 MODEL_FAILURES = (FitError, TransformError, ForecastContractError)
+NO_DIAG = {"n_resid": 0, "lb_p": np.nan, "lb_p_2m": np.nan, "arch_p": np.nan}
 
 
 def mase_scale(z: np.ndarray, m: int) -> float:
@@ -95,7 +99,10 @@ def _run_fold(
     cols: dict[str, list[Any]] = {}
     series_uid = index.name if index.name is not None else scfg.id
 
-    def emit(model: str, pred, lo, hi, level_pred, status, error, transform, variant, secs, info):
+    def emit(
+        model: str, pred, lo, hi, level_pred, status, error, transform, variant, secs, info,
+        diag=NO_DIAG,
+    ):  # fmt: skip
         n_train, n_out, scale = info
         rows = {
             "run_id": [run_id] * H,
@@ -121,6 +128,7 @@ def _run_fold(
                 "mase_scale": [scale] * H,
                 "n_train": [n_train] * H,
                 "n_outliers": [n_out] * H,
+                **{k: [v] * H for k, v in diag.items()},
                 "transform": [transform] * H,
                 "variant": [variant] * H,
                 "fit_seconds": [secs] * H,
@@ -224,8 +232,9 @@ def _run_fold(
             level_pred = implied_prices(mean)
             if name in MEMBERS:
                 member_means[name] = mean_t
+            diag = residual_tests(model.residuals(), m) if origin.role == "test" else NO_DIAG
             emit(name, mean, lo, hi, level_pred, "ok", "", tr_label, variant,
-                 time.perf_counter() - t0, info)  # fmt: skip
+                 time.perf_counter() - t0, info, diag)  # fmt: skip
         except MODEL_FAILURES as e:
             if name in MEMBERS:
                 member_means[name] = None

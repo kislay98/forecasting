@@ -338,3 +338,15 @@ def test_L1_ar_on_returns_is_blind_to_the_future():
     result = l1_check(series, scfg, cfg, lambda s: build_factories(scfg), n_origins=10)
     assert result.leaking_models == set(), result.leaks
     assert set(result.leaks) == {"ar"}
+
+
+def test_L1_compares_the_residual_diagnostics():
+    """RQ4's fold diagnostics are forecast columns for L1: poisoning the future must not
+    move them either."""
+    from forecasting.evaluation.diagnostics import DIAG_COLUMNS
+    from tests.leakage import forecast_columns
+
+    cfg, scfg, series = setup(level_series())
+    frame = run_backtest(series, scfg, cfg, "l1")[0].frame()
+    assert set(DIAG_COLUMNS) <= set(forecast_columns(frame).columns)
+    assert frame.loc[frame["origin_role"] == "test", "lb_p"].notna().any()
