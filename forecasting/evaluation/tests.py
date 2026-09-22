@@ -27,6 +27,16 @@ from scipy.special import xlogy
 
 from forecasting.evaluation.metrics import as_arrays
 
+# DM-HLN is not run below this effective sample n / h. The L3 canary (M7) measured its
+# one-sided size on 200 random walks with 30 origins: 9 to 15% at n / h = 2.5 (nominal
+# 5%), 2.5 to 4.5% at n / h = 5. The rectangular kernel with h - 1 lags cannot estimate
+# the long-run variance from 2.5 effective observations.
+MIN_N_EFF_DM = 5
+
+
+def dm_testable(n: int, h: int) -> bool:
+    return n >= MIN_N_EFF_DM * h
+
 
 def child_rng(seed: int, *labels: object) -> np.random.Generator:
     """D7: one Generator per labelled statistic, independent of the order of computation."""

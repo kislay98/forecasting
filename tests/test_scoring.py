@@ -155,11 +155,13 @@ def test_holm_covers_only_test_horizons_and_candidate_models():
     but are not in the family, so they cannot dilute it (M6 revises M5-12)."""
     p = quick(toy_frame(), toy_manifest()).point
     fam = p["dm_p_better_holm"].notna()
-    assert set(p.loc[fam, "h"]) == {1, 3}  # decision horizons
+    # decision horizons 1 and 3, but 14 origins at h = 3 is n / h = 4.7 < 5: untestable
+    assert set(p.loc[fam, "h"]) == {1}
+    assert p.loc[p["h"] == 3, "dm_p_better"].isna().all()
     assert set(p.loc[fam, "model"]) == {"good", "combination"}
     assert (p.loc[fam, "dm_p_better_holm"] >= p.loc[fam, "dm_p_better"]).all()
-    assert fam.sum() == 2 * 2  # 2 horizons x (good, combination)
-    assert p.loc[p["model"] == "naive", "dm_p_better"].notna().all()
+    assert fam.sum() == 2  # 1 testable horizon x (good, combination)
+    assert p.loc[(p["model"] == "naive") & (p["h"] < 3), "dm_p_better"].notna().all()
 
 
 def test_mcs_and_skill_have_the_a5_a6_shape():
@@ -318,7 +320,10 @@ def test_example_config_gives_a5_and_a6_tables(example_run):
             assert (w["n"] == n_test).all()
             # A5: per-horizon relative MAE, DM-HLN p-values, MCS membership
             others = w[w["model"] != ref]
-            assert others[["rel_mae", "dm_p", "dm_p_better"]].notna().all().all()
+            assert others["rel_mae"].notna().all()
+            testable = others["n"] >= 5 * others["h"]  # DM-HLN needs n / h >= 5 (M7)
+            assert others.loc[testable, ["dm_p", "dm_p_better"]].notna().all().all()
+            assert others.loc[~testable, "dm_p_better"].isna().all()
             assert w["mcs_in"].notna().all() and w.groupby("h")["mcs_in"].any().all()
             # A6: skill curve with CI at every h, and h*
             sk = s.skill[(s.skill["unique_id"] == uid) & (s.skill["window"] == window)]

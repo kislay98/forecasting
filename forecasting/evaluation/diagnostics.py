@@ -167,7 +167,7 @@ def window_gap(rows: pd.DataFrame, horizons) -> pd.DataFrame:
             "dm_p": math.nan,
             "p_rolling_better": math.nan,
         }
-        if n > h:
+        if st.dm_testable(n, int(h)):
             dm = st.dm_hln(j["rolling"].to_numpy(), j["expanding"].to_numpy(), int(h))
             rec |= {"dm_stat": dm.stat, "dm_p": dm.p_value, "p_rolling_better": dm.p_better}
         recs.append(rec)

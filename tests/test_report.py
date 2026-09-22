@@ -29,7 +29,20 @@ LAB = SeriesLabels("s", m=12, H=24, target="level", decision_horizons=(1, 12, 24
 def point(rows: list[tuple]) -> pd.DataFrame:
     """(model, h, rel_mae, holm p, mae) rows; the reference is 'ref'."""
     df = pd.DataFrame(rows, columns=["model", "h", "rel_mae", "dm_p_better_holm", "mae"])
-    return df.assign(reference="ref")
+    return df.assign(reference="ref", dm_p_better=df["dm_p_better_holm"] / 2)
+
+
+def test_rq1_untestable_horizons_are_named_and_never_pass():
+    """DM-HLN is not run below n / h = 5 (M7): those horizons cannot pass, are named in
+    the text, and 'yes' means every testable horizon."""
+    rows = point(
+        [("ets", 1, 0.8, 0.01, 1.0), ("ets", 12, 0.9, np.nan, 1.0), ("ets", 24, 0.9, np.nan, 1.0)]
+    )
+    rows.loc[rows["h"] > 1, "dm_p_better"] = np.nan
+    v, passes = rp.rq1(rows, LAB, "ref")
+    assert v.answer == "yes" and passes["ets"] == [1] and "Untestable at h = 12, 24" in v.text
+    rows[["dm_p_better", "dm_p_better_holm"]] = np.nan
+    assert rp.rq1(rows, LAB, "ref")[0].answer == "not testable"
 
 
 # ---------------------------------------------------------------- RQ1 and the exit table

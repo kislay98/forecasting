@@ -21,8 +21,9 @@ uv sync                                        # create .venv and install
 uv run forecast validate examples/config.yaml  # validate the example series
 uv run forecast run examples/config.yaml       # backtest every model, write store + report
 uv run forecast report examples/runs/<run_id>  # rebuild the report from the store, no refits
-uv run pytest                                  # all tests (CI runs these)
-uv run pytest -m "not slow"                    # quick loop, about 35 s
+uv run pytest                                  # all tests (CI runs these), about 10 min
+uv run pytest -m "not slow"                    # quick loop, about 40 s
+uv run pytest -m canary -s                     # L3 with every model: hours; runs nightly
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -157,6 +158,25 @@ Each rule has a bad fixture in `tests/fixtures/` (regenerate with
 
 The harness in `tests/leakage.py` is reused for every new model.
 
+`tests/test_canary.py` is L3, the random-walk canary: 200 simulated random walks, each
+through a full backtest; the share of series where any model "beats naive" (Holm-adjusted
+one-sided DM-HLN at the decision horizons) must not exceed the 5% false-positive rate,
+and naive must stay in the Model Confidence Set as often as a best model should. The
+cheap model set runs with the slow tests; the full set (ETS, SARIMA, combination) runs
+nightly (`.github/workflows/nightly.yml`) or by hand with `-m canary`.
+
+## Acceptance checks
+
+`tests/test_acceptance.py` runs three processes with known answers (research 9.2)
+through every level model: on the seasonal AR(1) only seasonal models beat seasonal
+naive; on the local linear trend ETS beats naive from h = m / 3 on; on a random walk
+nothing shows skill (A3). The same runs check that every (origin, model, h) cell has a
+row or a typed failure with under 1% failures (A4), that the report answers RQ1 to RQ6
+(A5 to A8) and that a 12-year monthly backtest with every model stays well under ten
+minutes (A9). `tests/test_simulation_conformance.py` checks the statsmodels path
+primitive Phase 2 will build on: 10,000 simulated ETS and SARIMA paths match the
+analytic point forecast and 80% bounds within 3 Monte Carlo standard errors.
+
 ## Layout
 
 ```
@@ -185,6 +205,7 @@ forecasting/
 tests/
   synthetic.py        seeded DGPs: random walk, local linear trend, seasonal AR(1),
                       trend reversal with variance jump
+  acceptance.py       in-memory synthetic backtests and the "beats naive" statistic (A3, L3)
   fixtures/           one bad CSV per rule
 configs/phase1.yaml   the real Phase 1 series
 docs/                 spec and research (snapshots of the Claude Docs pages)

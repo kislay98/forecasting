@@ -45,6 +45,10 @@ ignore = ["E501", "SIM300"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
-markers = ["slow: statsmodels-heavy; CI runs them, skip locally with -m 'not slow'"]
+# The canary tier (L3 with every model, hours) is skipped unless asked for: -m canary.
+addopts = "-ra -m 'not canary'"
+markers = [
+    "slow: statsmodels-heavy; CI runs them, skip locally with -m 'not slow'",
+    "canary: L3 over 200 random walks with every model; nightly, or by hand with -m canary",
+]
 filterwarnings = ["error::FutureWarning"]

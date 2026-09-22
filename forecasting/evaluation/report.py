@@ -30,6 +30,7 @@ from forecasting.backtest.selection import is_baseline, select_best_candidate
 from forecasting.backtest.store import ForecastStore
 from forecasting.evaluation.metrics import BUCKET_NAMES
 from forecasting.evaluation.scoring import Scores, SeriesLabels, pairwise, score, series_labels
+from forecasting.evaluation.tests import MIN_N_EFF_DM
 
 ALPHA = 0.05  # significance for RQ1, RQ3 (Kupiec) and RQ5
 LEAKAGE_GAIN = 0.30  # exit table: gains above 30% over ETS call for a leakage audit
@@ -171,16 +172,26 @@ def rq1(point: pd.DataFrame, lab: SeriesLabels, ref: str | None) -> tuple[Verdic
     t = cand[cand["h"].isin(th)]
     ok = (t["rel_mae"] < 1) & (t["dm_p_better_holm"] < ALPHA)
     passes = {m: sorted(int(h) for h in g.loc[ok[g.index], "h"]) for m, g in t.groupby("model")}
-    full = [m for m, hs in passes.items() if hs == th]
+    no_test = t.groupby("h")["dm_p_better"].apply(lambda x: x.isna().all())
+    untestable = sorted(int(h) for h in no_test[no_test].index)
+    testable = [h for h in th if h not in untestable]
+    note = (
+        f" Untestable at h = {hs_text(untestable)}: fewer than {MIN_N_EFF_DM} effective "
+        "origins (n / h), where DM-HLN is oversized."
+        if untestable
+        else ""
+    )
+    full = [m for m, hs in passes.items() if hs == testable and testable]
     some = {m: hs for m, hs in passes.items() if hs}
     if full:
         best = min(full, key=lambda m: t.loc[t["model"] == m, "rel_mae"].mean())
         rel = t[t["model"] == best].set_index("h")["rel_mae"]
         text = (
-            f"Yes. {', '.join(sorted(full))} beat {ref} at every test horizon ({hs_text(th)}), "
-            f"Holm-adjusted DM-HLN p < {ALPHA}. Relative MAE of {best}: "
+            f"Yes. {', '.join(sorted(full))} beat {ref} at every testable horizon "
+            f"({hs_text(testable)}), Holm-adjusted DM-HLN p < {ALPHA}. Relative MAE of {best}: "
             + ", ".join(f"{fmt(rel[h], 2)} at h = {h}" for h in th)
             + "."
+            + note
         )
         return Verdict("RQ1", "yes", text), passes
     if some:
@@ -189,16 +200,18 @@ def rq1(point: pd.DataFrame, lab: SeriesLabels, ref: str | None) -> tuple[Verdic
             Verdict(
                 "RQ1",
                 "partly",
-                f"Partly. Significant wins over {ref} only at some test horizons: {parts}.",
+                f"Partly. Significant wins over {ref} only at some test horizons: {parts}." + note,
             ),
             passes,
         )
+    if not testable:
+        return Verdict("RQ1", "not testable", f"Not testable: {note.strip()}"), passes
     return (
         Verdict(
             "RQ1",
             "no",
-            f"No. No candidate beats {ref} significantly at any test horizon "
-            f"({hs_text(th)}) after Holm correction.",
+            f"No. No candidate beats {ref} significantly at any testable horizon "
+            f"({hs_text(testable)}) after Holm correction." + note,
         ),
         passes,
     )
@@ -249,7 +262,7 @@ def exit_decision(
             f"outputs. RQ1 finds significant wins only at some test horizons, so treat the "
             f"others with caution. Provisional ({status}).",
         )
-    if v1.answer == "no":
+    if v1.answer in ("no", "not testable"):
         return Verdict(
             "exit",
             "stop modelling",

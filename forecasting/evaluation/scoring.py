@@ -14,7 +14,8 @@ Rules (spec: Metrics and statistics; scope update, Metrics row):
 - Level series get WAPE, sMAPE and MAPE (MAPE only if every test actual of the series
   is > 0). Return series get MAE and RMSE relative to the zero forecast, directional
   accuracy with Pesaran-Timmermann, and out-of-sample R^2 against mean_return.
-- DM-HLN runs at every h; Holm adjusts the one-sided "beats the reference" p-values
+- DM-HLN runs at every h with n / h >= 5 (tests.MIN_N_EFF_DM; below that it is
+  oversized, M7); Holm adjusts the one-sided "beats the reference" p-values
   over every (candidate model, test horizon) of a (series, window). Candidates are the
   models that are not baselines. Test horizons are the decision horizons, else the
   last h of each bucket.
@@ -303,7 +304,7 @@ class _Ctx:
         out["rel_mae"] = _nan_if_error(mt.relative_mae, y, yp, yr)
         if name == self.ref:
             return out
-        if n > h:
+        if st.dm_testable(n, h):
             dm = st.dm_hln(ea, er, h)
             out |= {"dm_stat": dm.stat, "dm_p": dm.p_value, "dm_p_better": dm.p_better}
         if er.sum() > 0:
@@ -486,7 +487,7 @@ def pairwise(
         rel = float(ea.mean() / eb.mean()) if eb.sum() > 0 else np.nan
         rec = {"h": h, "n": n, "n_eff": n / h, "rel_mae": rel}
         rec |= {"dm_stat": np.nan, "dm_p": np.nan, "dm_p_better": np.nan}
-        if n > h:
+        if st.dm_testable(n, h):
             dm = st.dm_hln(ea, eb, h)
             rec |= {"dm_stat": dm.stat, "dm_p": dm.p_value, "dm_p_better": dm.p_better}
         recs.append(rec)

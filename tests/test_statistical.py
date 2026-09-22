@@ -307,7 +307,7 @@ def test_sarima_residuals_drop_the_diffuse_burn_in():
     """With d + D m differences, SARIMAX's first residuals come from the initialisation
     (y itself, then y minus a partial seasonal difference). They are dropped."""
     s = SARIMAAuto(12).fit(SEASONAL)
-    burn = int(s._res.loglikelihood_burn)
+    burn = max(int(s._res.loglikelihood_burn), int(s._res.nobs_diffuse))
     assert burn >= 12  # D = 1 on this series
     r = s.residuals()
     assert len(r) == len(SEASONAL) - burn

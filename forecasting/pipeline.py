@@ -105,28 +105,61 @@ def run(cfg: RunConfig, validated: Validated, force: bool = False) -> RunResult:
     for scfg, s, report in validated.ok:
         part, plan = run_backtest(s, scfg, cfg, rid)
         store.extend(part)
-        plans[s.unique_id] = {
-            "initial_window": plan.initial_window,
-            "reduced": plan.reduced,
-            "n_origins": len(plan.origins),
-            "n_warmup": plan.n_warmup,
-            "n_dev": plan.n_dev,
-            "n_test": plan.n_test,
-            "origin_step": scfg.origin_step,
-            "windows": list(scfg.windows),
-            "mode": report.mode,
-        }
+        plans[s.unique_id] = plan_summary(plan, scfg, report.mode)
 
     frame = store.frame()
     store.write(out_dir / "forecasts.parquet")
+    manifest = build_manifest(
+        cfg,
+        frame,
+        plans,
+        run_id=rid,
+        git=git,
+        data_hashes={s.unique_id: s.data_hash for s in series},
+        gate=gate_status(cfg),
+        warnings=sorted({w for _, _, r in validated.ok for w in r.warnings}),
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    return RunResult(rid, out_dir, False, manifest)
+
+
+def plan_summary(plan, scfg: SeriesConfig, mode: str = "full") -> dict[str, Any]:
+    return {
+        "initial_window": plan.initial_window,
+        "reduced": plan.reduced,
+        "n_origins": len(plan.origins),
+        "n_warmup": plan.n_warmup,
+        "n_dev": plan.n_dev,
+        "n_test": plan.n_test,
+        "origin_step": scfg.origin_step,
+        "windows": list(scfg.windows),
+        "mode": mode,
+    }
+
+
+def build_manifest(
+    cfg: RunConfig,
+    frame,
+    plans: dict[str, Any],
+    run_id: str = "",
+    git: str = "",
+    data_hashes: dict[str, str] | None = None,
+    gate: dict[str, Any] | None = None,
+    warnings=(),
+) -> dict[str, Any]:
+    """The manifest for a store frame: config, plans, dev-origin selections, row counts.
+
+    `forecast run` writes it; the acceptance tests build one for in-memory backtests
+    so the report sees exactly what a run directory would carry.
+    """
     counts = frame.groupby("status").size().to_dict()
-    manifest = {
-        "run_id": rid,
+    return {
+        "run_id": run_id,
         "git": git,
         "created_utc": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "versions": _versions(),
         "config": json.loads(cfg.to_canonical_json()),
-        "data_hashes": {s.unique_id: s.data_hash for s in series},
+        "data_hashes": data_hashes or {},
         "plans": plans,
         "selections": {
             "sma": select_sma_k(frame),
@@ -135,8 +168,6 @@ def run(cfg: RunConfig, validated: Validated, force: bool = False) -> RunResult:
         },
         "rows": {"total": len(frame), **{k: int(v) for k, v in counts.items()}},
         "content_hash": content_hash(frame),
-        "gate": gate_status(cfg),
-        "warnings": sorted({w for _, _, r in validated.ok for w in r.warnings}),
+        "gate": gate if gate is not None else {"present": False},
+        "warnings": list(warnings),
     }
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-    return RunResult(rid, out_dir, False, manifest)

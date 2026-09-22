@@ -237,12 +237,26 @@ class SARIMAAuto(StatModel):
         self.n_fits = 0
 
     def _fit_one(self, y, order, sorder, trend):
+        """One SARIMAX fit, or None if it is unusable.
+
+        Exact diffuse initialisation (Durbin-Koopman): statsmodels' default mixed
+        initialisation breaks down with d = 2 (log-likelihood exactly 0, forecasts 0,
+        negative state variances) and its AICc then wins the search (found by the M7
+        simulation conformance test on the local linear trend). A fit is also rejected
+        when its log-likelihood is not finite or is 0, or its forecast is not finite.
+        """
         self.n_fits += 1
         try:
-            res = SARIMAX(y, order=order, seasonal_order=sorder, trend=trend).fit(disp=False)
+            res = SARIMAX(
+                y, order=order, seasonal_order=sorder, trend=trend, initialization="diffuse"
+            ).fit(disp=False)
+            if not (aicc_ok(res.aicc) and np.isfinite(res.llf) and res.llf != 0):
+                return None
+            if not np.isfinite(np.asarray(res.get_forecast(1).predicted_mean)).all():
+                return None
         except NUMERIC_ERRORS:
             return None
-        return res if aicc_ok(res.aicc) else None
+        return res
 
     def _fit_model(self, v: np.ndarray) -> None:
         m = self.m
@@ -324,9 +338,11 @@ class SARIMAAuto(StatModel):
         return mean, lower, upper
 
     def _residuals(self) -> np.ndarray:
-        # The first d + D m residuals come from the diffuse initialisation, not the model.
-        burn = int(getattr(self._res, "loglikelihood_burn", 0))
-        return np.asarray(self._res.resid, dtype=float)[burn:]
+        # The residuals of the diffuse periods (d + D m and any extra the exact diffuse
+        # filter needs) describe the initialisation, not the model.
+        res = self._res
+        burn = max(int(getattr(res, "loglikelihood_burn", 0)), int(getattr(res, "nobs_diffuse", 0)))
+        return np.asarray(res.resid, dtype=float)[burn:]
 
 
 # ---------------------------------------------------------------- Theta

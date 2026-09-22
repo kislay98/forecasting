@@ -1,0 +1,20 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: uv sync --locked
+      - name: L3 canary with every model
+        run: uv run pytest -m canary -s
