@@ -1168,7 +1168,11 @@ def build_report(
             "|---|---|---|---|",
         ]
         for s in series:
-            exp = gate_obj.series.get(s.uid).expectation if s.uid in gate_obj.series else ""
+            exp = (
+                " ".join(gate_obj.series[s.uid].expectation.split())
+                if s.uid in gate_obj.series
+                else ""
+            )
             head.append(f"| {s.uid} | {s.gate.answer} | {exp} | {s.gate.text} |")
         head.append("")
     body = "\n\n".join(s.markdown for s in series)

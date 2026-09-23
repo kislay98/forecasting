@@ -142,8 +142,11 @@ class ForecastStore:
 
 
 def content_hash(frame: pd.DataFrame) -> str:
-    """Hash of the store contents, timing columns excluded (acceptance check A1)."""
-    body = frame.drop(columns=TIMING_COLUMNS).sort_values(SORT_KEYS, kind="stable")
+    """Hash of the store contents, timing columns and the run_id label excluded (A1).
+
+    run_id names the run, it is not a forecast: two runs of the same config and data
+    from a clean and a dirty tree differ only in it and must hash the same (M8-11)."""
+    body = frame.drop(columns=[*TIMING_COLUMNS, "run_id"]).sort_values(SORT_KEYS, kind="stable")
     digest = pd.util.hash_pandas_object(body.reset_index(drop=True), index=True).to_numpy()
     h = hashlib.sha256(digest.tobytes())
     h.update(",".join(body.columns).encode())

@@ -11,6 +11,8 @@ and not financial advice.
 
 Spec: [docs/spec.md](docs/spec.md). Research: [docs/research.md](docs/research.md).
 Status and every decision made while building: [DECISIONS.md](DECISIONS.md).
+Phase 1 result: [docs/gate_decision.md](docs/gate_decision.md) (NO-GO on both series under
+the pre-registered rules; the report is in docs/phase1_report/).
 
 ## Quick start
 

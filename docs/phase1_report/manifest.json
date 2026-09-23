@@ -1,0 +1,329 @@
+{
+  "config": {
+    "levels": [
+      0.8,
+      0.95
+    ],
+    "seed": 20260922,
+    "series": [
+      {
+        "H": 20,
+        "columns": {
+          "date": "Date",
+          "id": null,
+          "value": "Close"
+        },
+        "date_format": "%d %b %Y",
+        "decision_horizons": [
+          1,
+          5,
+          20
+        ],
+        "duplicates": "error",
+        "freq": "trading_days",
+        "id": "nifty50",
+        "initial_window": 500,
+        "m": 1,
+        "models": [
+          "zero_return",
+          "mean_return",
+          "last_return",
+          "sma",
+          "ar"
+        ],
+        "n_dev_origins": 20,
+        "n_test_origins": 250,
+        "origin_step": 5,
+        "positive": false,
+        "rolling_length": 500,
+        "sarima_search": "stepwise",
+        "sma_windows": [
+          5,
+          20,
+          60,
+          250
+        ],
+        "source": "csv:../data/nifty50.csv",
+        "start": "1996-01-01",
+        "target": "returns",
+        "transform": "none",
+        "warmup_models": "baselines",
+        "window": "both"
+      },
+      {
+        "H": 24,
+        "columns": {
+          "date": "ds",
+          "id": null,
+          "value": "y"
+        },
+        "date_format": null,
+        "decision_horizons": [
+          1,
+          12,
+          24
+        ],
+        "duplicates": "error",
+        "freq": "monthly",
+        "id": "electricity",
+        "initial_window": 36,
+        "m": 12,
+        "models": [
+          "naive",
+          "seasonal_naive",
+          "drift",
+          "sma",
+          "ses",
+          "ets",
+          "sarima",
+          "theta",
+          "combination"
+        ],
+        "n_dev_origins": 20,
+        "n_test_origins": 120,
+        "origin_step": 1,
+        "positive": true,
+        "rolling_length": 36,
+        "sarima_search": "stepwise",
+        "sma_windows": [
+          3,
+          6,
+          12,
+          24
+        ],
+        "source": "fred:IPG2211A2N",
+        "start": "1990-01-01",
+        "target": "level",
+        "transform": "auto",
+        "warmup_models": "baselines",
+        "window": "both"
+      }
+    ]
+  },
+  "content_hash": "9ec22cce49a2aa8cce0d99247e945fcd04015f8f04fd486060f953fc791ca832",
+  "created_utc": "2026-09-22T23:47:26+00:00",
+  "data_hashes": {
+    "electricity": "5c2763da082081fceae4efefe670855172f315464e5e39e8b951ea24ccd11b5b",
+    "nifty50": "e4af01c57f472c30da5ef3387e0ea4fd9c04392579492b697f88530b1d9a1cdd"
+  },
+  "gate": {
+    "alpha": 0.05,
+    "commit": "e267a112f594ea7c30491276cafe8a64df1570dc",
+    "committed": true,
+    "path": "/Users/kislaykumar/Documents/GitHub/kislay/forecasting/configs/gate.yaml",
+    "present": true,
+    "primary_window": "expanding",
+    "registered": "2026-09-23",
+    "sha256": "22e458d1d926a44c5c0137fb4fa4a70050eff0878c8ec71e5da5288cd96ed28b"
+  },
+  "git": "e267a112f594ea7c30491276cafe8a64df1570dc",
+  "plans": {
+    "electricity": {
+      "initial_window": 36,
+      "mode": "full",
+      "n_dev": 20,
+      "n_origins": 381,
+      "n_test": 120,
+      "n_warmup": 241,
+      "origin_step": 1,
+      "reduced": false,
+      "windows": [
+        "expanding",
+        "rolling"
+      ]
+    },
+    "nifty50": {
+      "initial_window": 500,
+      "mode": "full",
+      "n_dev": 20,
+      "n_origins": 1417,
+      "n_test": 250,
+      "n_warmup": 1147,
+      "origin_step": 5,
+      "reduced": false,
+      "windows": [
+        "expanding",
+        "rolling"
+      ]
+    }
+  },
+  "rows": {
+    "ok": 569176,
+    "total": 569176
+  },
+  "run_id": "fe04aa2da050ff5f",
+  "selections": {
+    "best_baseline": {
+      "electricity": {
+        "expanding": {
+          "dev_mase": 1.1310803320816434,
+          "model": "seasonal_naive",
+          "scores": {
+            "drift": 3.9394417671108517,
+            "naive": 3.8519304386561832,
+            "seasonal_naive": 1.1310803320816434,
+            "sma_12": 2.861846065139261
+          }
+        },
+        "rolling": {
+          "dev_mase": 1.0905941079142323,
+          "model": "seasonal_naive",
+          "scores": {
+            "drift": 4.118311392824355,
+            "naive": 3.673608576952621,
+            "seasonal_naive": 1.0905941079142323,
+            "sma_24": 2.7400177795840643
+          }
+        }
+      },
+      "nifty50": {
+        "expanding": {
+          "dev_mase": 0.43531568054627384,
+          "model": "sma_250",
+          "scores": {
+            "last_return": 0.7698622827147567,
+            "mean_return": 0.442075920704539,
+            "sma_250": 0.43531568054627384,
+            "zero_return": 0.4465021386877903
+          }
+        },
+        "rolling": {
+          "dev_mase": 0.4367855657077852,
+          "model": "sma_250",
+          "scores": {
+            "last_return": 0.771459947014679,
+            "mean_return": 0.44305077370485735,
+            "sma_250": 0.4367855657077852,
+            "zero_return": 0.4479707653561132
+          }
+        }
+      }
+    },
+    "best_candidate": {
+      "electricity": {
+        "expanding": {
+          "dev_mase": 0.9607694386708441,
+          "model": "ets",
+          "ranking": [
+            "ets",
+            "theta",
+            "combination",
+            "sarima",
+            "ses"
+          ],
+          "scores": {
+            "combination": 1.0093754247167614,
+            "ets": 0.9607694386708441,
+            "sarima": 1.3206970169385421,
+            "ses": 2.873170627396476,
+            "theta": 0.9717740613530561
+          },
+          "with_intervals": "ets"
+        },
+        "rolling": {
+          "dev_mase": 1.2513946314786546,
+          "model": "ets",
+          "ranking": [
+            "ets",
+            "combination",
+            "sarima",
+            "theta",
+            "ses"
+          ],
+          "scores": {
+            "combination": 1.2801853114586974,
+            "ets": 1.2513946314786546,
+            "sarima": 1.4103732478789368,
+            "ses": 2.7424354755159626,
+            "theta": 1.4268455133990012
+          },
+          "with_intervals": "ets"
+        }
+      },
+      "nifty50": {
+        "expanding": {
+          "dev_mase": 0.4417615579640673,
+          "model": "ar",
+          "ranking": [
+            "ar"
+          ],
+          "scores": {
+            "ar": 0.4417615579640673
+          },
+          "with_intervals": "ar"
+        },
+        "rolling": {
+          "dev_mase": 0.44162200340001695,
+          "model": "ar",
+          "ranking": [
+            "ar"
+          ],
+          "scores": {
+            "ar": 0.44162200340001695
+          },
+          "with_intervals": "ar"
+        }
+      }
+    },
+    "sma": {
+      "electricity": {
+        "expanding": {
+          "dev_mase": 2.861846065139261,
+          "k": 12,
+          "model": "sma_12",
+          "scores": {
+            "sma_12": 2.861846065139261,
+            "sma_24": 2.8624941984201353,
+            "sma_3": 3.3754641564782357,
+            "sma_6": 2.940598578371486
+          }
+        },
+        "rolling": {
+          "dev_mase": 2.7400177795840643,
+          "k": 24,
+          "model": "sma_24",
+          "scores": {
+            "sma_12": 2.7400850179646463,
+            "sma_24": 2.7400177795840643,
+            "sma_3": 3.215743737926379,
+            "sma_6": 2.811399113030185
+          }
+        }
+      },
+      "nifty50": {
+        "expanding": {
+          "dev_mase": 0.43531568054627384,
+          "k": 250,
+          "model": "sma_250",
+          "scores": {
+            "sma_20": 0.45764046798079044,
+            "sma_250": 0.43531568054627384,
+            "sma_5": 0.48473466553557004,
+            "sma_60": 0.4449512493674092
+          }
+        },
+        "rolling": {
+          "dev_mase": 0.4367855657077852,
+          "k": 250,
+          "model": "sma_250",
+          "scores": {
+            "sma_20": 0.45918698388800444,
+            "sma_250": 0.4367855657077852,
+            "sma_5": 0.486298967769127,
+            "sma_60": 0.44639562741336997
+          }
+        }
+      }
+    }
+  },
+  "versions": {
+    "forecasting": "0.1.0",
+    "joblib": "1.6.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.11.9",
+    "scipy": "1.17.1"
+  },
+  "warnings": []
+}

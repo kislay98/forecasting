@@ -25,7 +25,7 @@ before any milestone.
 | M5 | Metrics and tests (DM-HLN, Holm, Kupiec, MCS, Pesaran-Timmermann, skill bootstrap), scoring layer | Done (22 Sep 2026) |
 | M6 | Residual diagnostics, report (RQ1 to RQ6, exit table, plots), CLI `run` and `report` | Done (22 Sep 2026) |
 | M7 | Known-answer acceptance (A3 to A9), L3 canary, simulation conformance | Done (23 Sep 2026) |
-| M8 | gate.yaml (P1) loading and matching, committed-before-run check, A10 gate decision in the report | Done (23 Sep 2026) |
+| M8 | gate.yaml (P1), real data run, A10 go/no-go: NO-GO on both series, [docs/gate_decision.md](docs/gate_decision.md) | Done (23 Sep 2026) |
 | Phase 1 run | Real Nifty 50 and electricity data loaded and validated; `forecast run` pending | In progress |
 
 ## Scope update (22 Sep 2026)
@@ -212,15 +212,19 @@ L3 (random-walk canary) is M7; P1 (gate.yaml pre-registration) is M8.
 | M8-6 | nifty50 starts at 1996-01-01 (7,602 rows). The index base date is 03 Nov 1995; earlier values are back-computed, and 1990 to 1993 has multi-week gaps that trip the closure rule (12 consecutive weekdays with no value from 1992-06-29). 1994-01-01 is the earliest start that validates, but its first two years are still back-computed | Every scored observation should be a real traded close. 7,601 usable points is far above the 1,865 minimum for H = 20 |
 | M8-7 | The FRED cache configs/data/fred/IPG2211A2N.csv is committed (the .gitignore rule is negated for that one folder), contrary to the M1-14 assumption that each machine fetches its own | A pre-registered run has to reproduce byte for byte on another machine, and fred.stlouisfed.org is not reachable from every network this project runs on |
 | M8-8 | Series dates are parsed with an explicit `date_format` ("%d %b %Y" for the NSE export) rather than letting pandas infer | Inference on "03 Jul 1990" style dates is exactly where a silent day/month swap hides |
+| M8-9 | The registered run is `fe04aa2da050ff5f` (git e267a112f594, gate sha256 22e458d1d926): 569,176 rows, 0 failed, 0 skipped; 1,417 Nifty origins (250 test, step 5) and 381 electricity origins (120 test). Both series NO-GO under the registered rules; the reasoning is in docs/gate_decision.md and the report and manifest are copied to docs/phase1_report/ | A10 asks for a written decision committed to the repo, with the evidence a reader can check |
+| M8-10 | The electricity control is read as passed in what it was for: every seasonal model beats seasonal naive in relative MAE at every h and sits in the MCS while the non-seasonal models are excluded. Its NO-GO is a power outcome (smallest Holm p 0.066 over 15 tests; raw p 0.004 to 0.012 at h = 1). The registered rules were not changed after the fact; the lesson for a future control is fewer registered tests or more origins | P1 exists so the gate cannot be renegotiated; the write-up says what the rule and the data each say |
+| M8-11 | content_hash no longer includes the run_id column. A1 on real data: two runs of the registered config (one from a clean tree, one from a tree dirty with a report edit) give identical stores, 569,176 rows equal after dropping run_id and fit_seconds; their manifest hashes differed only because run_id, a label, was hashed | A dirty-tree rerun is the common way to reproduce a run, and the hash should answer "same forecasts?" not "same label?" |
+| M8-12 | Runtime of the registered design: 28 CPU minutes (SARIMA 25 of them) but 94 minutes of wall time with `n_jobs: 4`, and 2h49m for the reproduction run at 20% CPU. joblib dispatch over 4,300 folds with the full series array pickled per task is inefficient here; the spec's A9 (10-year monthly, one core, under 10 minutes) still holds, the registered design is 4x that. Not fixed in Phase 1 | Phase 4 (operations) owns runtime; the result is what matters for the gate |
 
-## Notes for the Phase 1 run
+## Notes for Phase 2
 
-- The report's exit decision is still labelled provisional. M8 wires gate.yaml: primary window, decision horizons, thresholds (research 8.5: relative MAE below 1 at every h up to h*, significant at the decision horizons; 80% coverage in [75, 85]% and 95% in [91, 98]% per bucket; bias; 3 of 4 sub-periods) and the model list; `exit_decision` reads them; the report refuses a gate decision when gate.yaml changed after the first test-origin run (P1, M2-13 records its sha256).
-- Untestable decision horizons (M7-3) matter for the real electricity control: with 30 monthly test origins only h = 1 of (1, 12, 24) is testable. Either accept that RQ1 rests on h = 1 there, or give the control more test origins (`n_test_origins`) before gate.yaml fixes the design. Nifty (250 origins, H = 20) has n / h = 12.5 at h = 20: every decision horizon is testable.
-- The canary's full tier has not been run yet (it is hours). Run `uv run pytest -m canary -s` once, or wait for the first nightly, before the real data run.
-- A1 on real data: `forecast run --force` must reproduce the content hash (tests/test_cli.py does this on the example).
-- Data is in place: data/nifty50.csv (M8-5, M8-6) and the committed FRED cache (M8-7). `forecast validate configs/phase1.yaml` passes both series.
-- Electricity is already cut to 1990-01-01 by the config (440 rows), so the 1939 history is not fitted. Nifty is 7,601 points, well past the 150-point A9 timing measurement: watch the first run against the 10 minute budget.
+- Nifty: the exit table's "Phase 2 lite": zero-return point forecast plus empirical error quantiles, and a GARCH-family error model for the intervals (ARCH-LM rejects at 100% of test origins; AR's Normal intervals over-cover, 94% at the 80% level). No more work on the conditional mean without covariates.
+- Electricity: registered NO-GO. If it is used again as a control, register one decision horizon or one pre-named candidate (the combination) so the family is small, or more test origins; do not rerun the same design.
+- The path primitive is verified (tests/test_simulation_conformance.py); Phase 2's error sampler needs a block bootstrap (Ljung-Box rejects on every model's residuals) and a variance model for returns.
+- Theta and the combination expose no residuals; compute Theta's one-step in-sample residuals if the sampler needs them.
+- The full-model L3 canary runs nightly (.github/workflows/nightly.yml); check its first result. Manual dispatch needs admin rights on the repository.
+- Parallel runtime (M8-12): batch folds per task or pass the series once per worker before running anything larger.
 
 ## Open items for later milestones
 
