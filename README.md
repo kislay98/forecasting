@@ -1,17 +1,17 @@
 # forecasting
 
-Can any forecasting model beat "tomorrow will be like today" on real data, once every
+Can any forecasting model beat a simle guess like "tomorrow will be like today" on real data, once every
 way of cheating with future information has been ruled out?
 
 This project answers that question for two series:
 
-- **Nifty 50** (India's stock index, daily): the series we care about.
+- **Nifty 50** (India's stock index, daily)
 - **US electricity and gas output** (monthly, from FRED): a control with real seasonal
   structure, included to prove the machinery can see a pattern when there is one.
 
 It is a research study, not a trading system, and not financial advice.
 
-## The answer (Phase 1, September 2026)
+## The answer
 
 **Nifty 50: no.** Nothing beats predicting a zero return for tomorrow, at 1, 5 or 20
 trading days ahead. What the data do show is volatility clustering: calm and turbulent
@@ -55,7 +55,7 @@ tables behind each, and three plots per series. To reproduce the real result:
 uv run forecast run configs/phase1.yaml    # about 30 CPU minutes; data are in the repo
 ```
 
-## How it works, in one paragraph
+## How it works
 
 Each series is replayed through time. At every origin the models see only the data up
 to that point, refit from scratch, and forecast 1 to H steps ahead. Every forecast is
@@ -97,7 +97,7 @@ confidence interval for $\text{SS}(h)$ touches zero (moving-block bootstrap over
 block length $h$, 2,000 replicates).
 
 **Is a difference real?** The Diebold-Mariano test on the loss differential
-$d_t = |e^{A}_{t}| - |e^{B}_{t}|$ with the Harvey-Leybourne-Newbold small-sample
+$`d_t = \lvert e^{A}_{t}\rvert - \lvert e^{B}_{t}\rvert`$ with the Harvey-Leybourne-Newbold small-sample
 correction; multi-step errors overlap, so the variance uses autocovariances up to lag
 $h-1$ and the effective sample is about $n/h$:
 
@@ -157,3 +157,4 @@ NO-GO.
 | Run your own series, understand every option and test | [docs/reference.md](docs/reference.md) |
 | See every decision made while building, in order | [DECISIONS.md](DECISIONS.md) |
 | Read the original plan and the research behind it | [docs/spec.md](docs/spec.md), [docs/research.md](docs/research.md) |
+  
