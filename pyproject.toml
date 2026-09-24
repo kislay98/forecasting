@@ -13,6 +13,9 @@ dependencies = [
     "pyyaml>=6.0",
     "scipy>=1.11",
     "statsmodels>=0.14.2",
+    # Phase 2: GARCH-family conditional variance. Was dev-only in Phase 1, where it
+    # existed only to check our Model Confidence Set against a second implementation.
+    "arch>=8.0.0",
 ]
 
 [project.scripts]
@@ -20,7 +23,6 @@ forecast = "forecasting.cli:main"
 
 [dependency-groups]
 dev = [
-    "arch>=8.0.0",
     "pytest>=8.0",
     "ruff>=0.6",
 ]

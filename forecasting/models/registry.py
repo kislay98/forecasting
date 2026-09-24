@@ -24,6 +24,13 @@ from forecasting.models.statistical import (
     Theta,
     seasonal_or_stl,
 )
+from forecasting.models.variance import (
+    EWMA,
+    GARCH,
+    GJRGARCH,
+    ConstantSigma,
+    GARCHNormal,
+)
 
 REGISTRY: dict[str, ModelFactory] = {
     "naive": lambda m: Naive(),
@@ -37,6 +44,11 @@ REGISTRY: dict[str, ModelFactory] = {
     "sarima": lambda m: seasonal_or_stl(lambda k: SARIMAAuto(k), m),
     "theta": lambda m: Theta(m),
     "ar": lambda m: ARAuto(),
+    "zero_return_fhs": lambda m: ConstantSigma(),
+    "ewma": lambda m: EWMA(),
+    "garch_normal": lambda m: GARCHNormal(),
+    "garch": lambda m: GARCH(),
+    "gjr_garch": lambda m: GJRGARCH(),
 }
 DERIVED = ("combination",)
 

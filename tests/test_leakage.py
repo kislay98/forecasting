@@ -350,3 +350,27 @@ def test_L1_compares_the_residual_diagnostics():
     frame = run_backtest(series, scfg, cfg, "l1")[0].frame()
     assert set(DIAG_COLUMNS) <= set(forecast_columns(frame).columns)
     assert frame.loc[frame["origin_role"] == "test", "lb_p"].notna().any()
+
+
+def test_L1_variance_models_are_blind_to_the_future():
+    """Phase 2's conditional variance models see only the training slice, including
+    the standardised residuals their interval tails are drawn from."""
+    df = to_frame(gbm_prices(n=2400, seed=31), "trading_days", "2015-01-01", unique_id="s")
+    cfg, scfg, series = _stat_setup(
+        df,
+        freq="trading_days",
+        target="returns",
+        H=20,
+        initial_window=900,
+        n_test_origins=40,
+        models=["zero_return_fhs", "ewma", "garch_normal", "garch", "gjr_garch"],
+    )
+    result = l1_check(series, scfg, cfg, lambda s: build_factories(scfg), n_origins=6)
+    assert result.leaking_models == set(), result.leaks
+    assert set(result.leaks) == {
+        "zero_return_fhs",
+        "ewma",
+        "garch_normal",
+        "garch",
+        "gjr_garch",
+    }

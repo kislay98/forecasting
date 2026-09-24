@@ -40,8 +40,23 @@ RETURN_BASELINES: tuple[str, ...] = ("zero_return", "mean_return", "last_return"
 # Scope update: ETS, SARIMA and Theta only for level series; AR(p) for returns.
 LEVEL_STATISTICAL: tuple[str, ...] = ("ses", "ets", "sarima", "theta", "combination")
 RETURN_STATISTICAL: tuple[str, ...] = ("ar",)
+# Phase 2 lite: the mean is fixed at zero and the interval is the product. These vary
+# the conditional variance and the tail rule independently, so a run can say which of
+# the two did the work.
+RETURN_VARIANCE: tuple[str, ...] = (
+    "zero_return_fhs",
+    "ewma",
+    "garch_normal",
+    "garch",
+    "gjr_garch",
+)
 LEVEL_MODELS: tuple[str, ...] = LEVEL_BASELINES + LEVEL_STATISTICAL
-RETURN_MODELS: tuple[str, ...] = RETURN_BASELINES + RETURN_STATISTICAL
+RETURN_MODELS: tuple[str, ...] = RETURN_BASELINES + RETURN_STATISTICAL + RETURN_VARIANCE
+# What a series gets when `models:` is omitted. The Phase 2 variance models are opt-in:
+# adding them to the default would change the effective model list of every existing
+# config, including the pre-registered configs/phase1.yaml, and break its gate match.
+DEFAULT_LEVEL_MODELS: tuple[str, ...] = LEVEL_MODELS
+DEFAULT_RETURN_MODELS: tuple[str, ...] = RETURN_BASELINES + RETURN_STATISTICAL
 COMBINATION_MEMBERS: tuple[str, ...] = ("ets", "sarima", "theta")  # fixed before any run
 WARMUP_MODES: tuple[str, ...] = ("baselines", "all")
 SARIMA_SEARCHES: tuple[str, ...] = ("stepwise", "grid")
@@ -334,9 +349,10 @@ def _parse_series(raw: Any, i: int) -> SeriesConfig:
         raise ConfigError(f"{p}.initial_window", "must be at least 2")
 
     allowed = RETURN_MODELS if target == "returns" else LEVEL_MODELS
+    default = DEFAULT_RETURN_MODELS if target == "returns" else DEFAULT_LEVEL_MODELS
     models_raw = raw.get("models")
     if models_raw is None:
-        models = tuple(x for x in allowed if not (x == "seasonal_naive" and m == 1))
+        models = tuple(x for x in default if not (x == "seasonal_naive" and m == 1))
     else:
         if not isinstance(models_raw, list) or not models_raw:
             raise ConfigError(f"{p}.models", "must be a non-empty list of model names")
