@@ -117,7 +117,11 @@ def pit_uniformity(y, quantiles, taus) -> tuple[float, float]:
     """
     counts, expected = pit_bins(y, quantiles, taus)
     n = counts.sum()
-    if n < 5 / min(expected):
+    # Pearson needs about 5 expected in the smallest bin. Compared as a count rather
+    # than as n < 5 / min(expected), which makes the boundary a floating-point coin
+    # flip: at ten levels the smallest bin is 0.025 and 5 / 0.025 evaluates to
+    # 200.00000000000026, so a sample of exactly 200 was silently returning nan.
+    if n * float(np.min(expected)) < 5.0 - 1e-9:
         return float("nan"), float("nan")
     exp = expected * n
     stat = float(np.sum((counts - exp) ** 2 / exp))

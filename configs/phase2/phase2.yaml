@@ -1,0 +1,37 @@
+# Phase 2 lite (Nifty 50 only). The mean is fixed at zero, which is what Phase 1
+# established, so the interval is the product and calibration is the scoreboard.
+# Pre-registered with the P2 section of configs/gate.yaml: change either only with a
+# new gate commit. The electricity control does not come along (P2-1).
+seed: 20260925
+n_jobs: 4                             # parallel folds; not part of the run_id
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]   # ten quantiles per row, which the PIT bins read
+series:
+  - id: nifty50
+    source: csv:../../data/nifty50.csv     # NSE price index, weekend sessions dropped (M8-5)
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01                   # as registered for Phase 1 (M8-6)
+    freq: trading_days
+    season: none
+    target: returns
+    H: 20
+    decision_horizons: [1, 5]           # day and week. See below for why not 20
+    origin_step: 5
+    n_dev_origins: 200                  # thresholds are set from these, so dev has to be
+                                        # large enough to read; Phase 1 needed only 20
+    n_test_origins: 400                 # 8 years of test period at step 5
+    models:
+      - zero_return                     # Phase 1's comparator: constant variance, Normal tails
+      - zero_return_fhs                 # tails only
+      - ewma                            # variance only, no fitted parameters
+      - garch_normal                    # variance only, fitted
+      - garch                           # variance and tails
+      - gjr_garch                       # variance and tails, with leverage
+
+# Why the decision horizons stop at 5. y_true at horizon h is the single-day return on
+# day t+h, not the cumulative return over h days. Christoffersen independence reads the
+# hit sequence itself, so it needs origin_step >= h and cannot be repaired by an
+# effective sample the way Kupiec can (P2-4). At step 5 that means h = 1 and h = 5 are
+# testable and h = 20 is not. Following the Phase 1 precedent for an untestable
+# statistic (M7-3), h = 20 is reported and labelled untestable rather than dropped or
+# pretended into a number.
