@@ -17,6 +17,7 @@ from forecasting.models.baselines import (
     ZeroReturn,
 )
 from forecasting.models.blocks import BLOCK_REGISTRY
+from forecasting.models.parameter_uncertainty import GARCHPU, GJRGARCHPU
 from forecasting.models.statistical import (
     SES,
     ARAuto,
@@ -51,6 +52,8 @@ REGISTRY: dict[str, ModelFactory] = {
     "garch": lambda m: GARCH(),
     "gjr_garch": lambda m: GJRGARCH(),
     **BLOCK_REGISTRY,  # Phase 6: the same models with block-bootstrap innovations
+    "garch_pu": lambda m: GARCHPU(),  # Phase 7: parameters drawn per path (OP-3)
+    "gjr_garch_pu": lambda m: GJRGARCHPU(),
 }
 DERIVED = ("combination",)
 

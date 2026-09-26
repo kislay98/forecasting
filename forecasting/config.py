@@ -60,6 +60,8 @@ RETURN_VARIANCE: tuple[str, ...] = (
     "garch",
     "gjr_garch",
     *("ewma_block", "garch_block", "gjr_garch_block"),  # Phase 6: block-bootstrap innovations
+    "garch_pu",  # Phase 7: the GARCH pair with parameters drawn per path (OP-3)
+    "gjr_garch_pu",
 )
 LEVEL_MODELS: tuple[str, ...] = LEVEL_BASELINES + LEVEL_STATISTICAL
 RETURN_MODELS: tuple[str, ...] = RETURN_BASELINES + RETURN_STATISTICAL + RETURN_VARIANCE

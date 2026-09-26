@@ -1,0 +1,68 @@
+# Pre-registration for Phase 7b, the Phase 7 measurement on the S&P 500, committed with
+# configs/phase7/gate.yaml before either run scores a test origin.
+#
+# Everything is Phase 5b's design and Phase 5b's decision rule (itself Phase 4's), with
+# gjr_garch_pu as the primary in place of gjr_garch. `phase: 4` is the schema, for the
+# reason given in configs/phase7/gate.yaml. The adoption rule is the one registered
+# there and is applied to each market separately.
+phase: 4
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  sp500:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - garch
+      - garch_pu
+      - gjr_garch
+      - gjr_garch_pu
+    primary_model: gjr_garch_pu
+    chosen_by: >
+      The twin of Phase 5b's primary, gjr_garch, carried by name from Phase 4. Nothing
+      is reselected.
+    expectation: >
+      Seen before registering: the 100 dev origins in paired mode (same innovations,
+      parameters drawn or not), and three smoke fits of the GJR model on 2,500, 4,000
+      and the whole sample of returns, the last of which includes the test period. No
+      test origin was scored.
+
+      The finding that shapes this registration: on the S&P 500 the GJR fit puts
+      alpha[1] exactly on its lower bound of zero, at every dev origin and on the whole
+      sample, with gamma carrying all of the response to shocks. The asymptotic
+      covariance treats that estimate as interior, so about half of all draws have
+      alpha below zero and are rejected: 50.6% per dev origin, with no origin below
+      50%. The accepted draws are therefore a Normal truncated at the bound, whose mean
+      alpha is about 0.009 rather than 0, and that shift makes the variance respond more
+      to every shock. Whatever widening the twin shows here is mostly that truncation,
+      and it should be read as an upper bound on parameter uncertainty rather than a
+      measurement of it. garch, whose alpha is interior, is the cleaner comparison on
+      this market.
+
+      Dev, mean width ratio at h = 20, gjr_garch_pu over gjr_garch: 1.003 at 80%, 1.012
+      at 95%, 1.025 at 99%. garch_pu over garch: 0.996, 0.998, 1.002, with 8.2% of draws
+      rejected.
+
+      The registered predictions, for the test origins of the expanding window:
+
+      1. Rejection for gjr_garch_pu stays between 45% and 55% at every test origin, the
+      signature of a parameter on its bound rather than of persistence near 1.
+
+      2. Size. The gjr_garch_pu ratio at h = 20 lies in [1.00, 1.04] at 95% and 99%,
+      larger than on Nifty, and the garch_pu ratio stays within [0.98, 1.03] at every
+      level, as on Nifty.
+
+      3. Checks. With the conformal layer gjr_garch_pu is a GO, 21 of 21, as gjr_garch
+      was in 5b. Without it, gjr_garch_pu fails the check gjr_garch failed there, 95%
+      coverage at h = 20 (197 of 200 against a ceiling of 196), and by at least as much,
+      because on this market the twin is wider.
+
+      4. The adoption rule from configs/phase7/gate.yaml returns "do not adopt" here as
+      well: a widening of about 1% at 95% is below the 2.4% per-origin simulation noise.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P5b
+  crps_ratio_below: 1.0           # against zero_return_fhs on the same origins
+  conformal_window: 60            # as registered for P4 and P5b

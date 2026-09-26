@@ -1,0 +1,42 @@
+# Phase 7 (OP-3): parameter uncertainty propagated through the simulation.
+#
+# The design is Phase 4's, unchanged: same series, start, horizons, origins, seed and
+# path count. The point models keep their names and their fold seeds, so their rows here
+# must equal a Phase 4 run made on the same machine from the code before this phase,
+# column for column. That is the second proof that nothing about them changed; the first
+# is the Phase 2 store compared before and after.
+#
+# What is new is a twin for each fitted GARCH: garch_pu and gjr_garch_pu fit exactly as
+# garch and gjr_garch do, then draw one parameter vector per simulated path from the
+# asymptotic covariance of the fit (forecasting/models/parameter_uncertainty.py). The
+# difference between a model and its twin, origin by origin, is the width the published
+# intervals were missing.
+#
+# ewma and garch_normal are left out. EWMA has no fitted parameters (lambda is fixed at
+# the RiskMetrics 0.94), so it has no parameter uncertainty to propagate, and
+# garch_normal is an ablation that no decision was read from. zero_return_fhs stays
+# because it is the registered CRPS comparator.
+seed: 20260926
+n_jobs: 4                             # parallel folds; not part of the run_id
+n_paths: 10000                        # as registered for P3 and P4; see the gate for cost
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]
+series:
+  - id: nifty50
+    source: csv:../../data/nifty50.csv  # NSE price index, weekend sessions dropped (M8-5)
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01                   # as registered for Phase 1 (M8-6)
+    freq: trading_days
+    season: none
+    target: cumulative_returns          # the P3 and P4 object, log(p_t+h / p_t)
+    H: 20
+    decision_horizons: [1, 5, 20]
+    origin_step: 20
+    n_dev_origins: 100
+    n_test_origins: 200
+    models:
+      - zero_return_fhs
+      - garch
+      - garch_pu
+      - gjr_garch
+      - gjr_garch_pu

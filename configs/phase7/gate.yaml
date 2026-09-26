@@ -1,0 +1,114 @@
+# Pre-registration for Phase 7 (OP-3, parameter uncertainty), committed before the
+# first `forecast run configs/phase7/phase7.yaml` that scores a test origin.
+#
+# The question is a measurement, not a new model: how much of the published interval
+# width was missing because the GARCH parameters entered every simulated path as point
+# estimates. gjr_garch_pu is gjr_garch with one parameter vector drawn per path from the
+# asymptotic covariance of the fit, and nothing else changed. The width it adds, origin
+# by origin, is the answer.
+#
+# `phase: 4` is the schema, not the study's phase. forecasting/gate.py knows phases 1 to
+# 4 and P7 registers Phase 4's decision rule unchanged (coverage bands, Kupiec and
+# Christoffersen at the Sidak level for twelve tests, CRPS against zero_return_fhs, all
+# after the conformal layer with window 60), so it uses Phase 4's schema. Adding a phase
+# 7 to gate.py would have meant editing a shared file that four committed gates load
+# through, for no change in what is checked.
+#
+# Two things are registered and they are different things:
+#
+#   the gate decision   the P4 rule applied to gjr_garch_pu. It answers whether the
+#                       model with parameter uncertainty is calibrated by the rule the
+#                       point model passed.
+#   the adoption rule   whether the twin should replace the point model in published
+#                       intervals. Stated in the expectation below, with its threshold,
+#                       so the answer cannot be chosen after the width is seen.
+phase: 4
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  nifty50:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - garch
+      - garch_pu
+      - gjr_garch
+      - gjr_garch_pu
+    primary_model: gjr_garch_pu
+    chosen_by: >
+      The twin of Phase 4's primary, gjr_garch, which Phase 4 carried over from Phase 3.
+      Nothing is reselected: the point of the phase is that the only difference between
+      this model and the one Phase 4 decided on is the parameter draws.
+    expectation: >
+      What was seen before registering, stated first because it limits what the
+      prediction is worth. The prediction comes from the 100 dev origins, measured with
+      scripts/phase7_widening.py in paired mode: gjr_garch refitted at each dev origin
+      and simulated twice with the same innovation draws, once with the fitted
+      parameters and once with one parameter vector per path. During development two
+      smoke fits were also run, one on the first 3,600 returns and one on the whole
+      sample, which includes the test period. No test origin was scored and no test
+      coverage was seen, but the full-sample fit showed the order of magnitude at late
+      origins (+0.5% to +1.6% on width, 22% of draws rejected), and that is not blind.
+
+      Dev, gjr_garch_pu over gjr_garch, mean width ratio at h = 20: 0.996 at 80%, 1.000
+      at 95%, 1.003 at 99%. At h = 1: 0.997, 1.000, 0.998. Rejected draws 4.7% per
+      origin on average, at most 9.0%. The draws do move the volatility forecast: its
+      coefficient of variation across draws is 5.4% for the next day and 7.2% for the
+      20-day volatility. The intervals barely move anyway, and the reason is structural
+      rather than a broken draw. The mean is fixed at zero and not estimated, so
+      parameter error cannot shift the distribution, only mix its scale. A scale mixture
+      that roughly preserves the variance fattens the tails and thins the shoulders, so
+      the effect on width is second order in that 5 to 7% (a few tenths of a percent),
+      negative at 80% and positive at 99%. Rejection truncates the Normal away from the
+      stationarity boundary, which lowers persistence slightly (by 0.003 on dev) and
+      pushes the same way at 80%.
+
+      The registered predictions, for the test origins of the expanding window:
+
+      1. Size. The mean width ratio gjr_garch_pu over gjr_garch at h = 20 lies in
+      [0.98, 1.03] at 80%, 95% and 99%. The session prompt expected single-digit percent
+      widening; this predicts less than that, under 3% at every level and horizon.
+
+      2. Shape. Any widening grows with the level: the 99% ratio exceeds the 80% ratio
+      at h = 20. The 80% ratio may be below 1.
+
+      3. h = 1 is not special. Parameter error reaches h = 1 through the starting
+      variance sigma_t+1|t, which each draw refilters from the data, so the h = 1 effect
+      is the same order as the h = 20 one rather than absent.
+
+      4. Rejection rises from dev to test, mean between 8% and 35% per test origin,
+      because the expanding sample grows, includes 2008 and 2020, and pushes the fitted
+      persistence towards 1 (the full-sample smoke fit rejected 22%).
+
+      5. Checks. Nothing registered changes. With the conformal layer (this gate's rule)
+      gjr_garch_pu is a GO, 21 of 21, as gjr_garch was in P4. Without it (the P3 rule)
+      gjr_garch_pu fails the same single check gjr_garch failed in P3, 80% coverage at
+      h = 20. That cell was 173 of 200 against a ceiling of 170, and a change of a few
+      tenths of a percent in width moves one or two origins, not three. No coverage cell
+      of the primary moves by more than two origins (0.010).
+
+      The adoption rule. The twin replaces the point model in published intervals only
+      if its mean widening at h = 20 exceeds the per-origin simulation noise on a 95%
+      band edge at 10,000 paths, 2.4% of the band width (OP-1), or if it changes the
+      outcome of any registered check. Otherwise the point models stay as published,
+      OP-3 closes as measured, and the measured size is what gets written down.
+
+      The registered risk is a boundary, not a crisis. If a fitted parameter sits on its
+      bound, as alpha does in the S&P 500 GJR fit (Phase 7b), about half of all draws are
+      rejected at every origin and what the twin measures is mostly the truncation of a
+      Normal at that bound, which the asymptotic covariance does not describe. A mean
+      rejection rate above 50% on Nifty would mean that has happened here too, and the
+      width would then be read as an upper bound rather than a measurement. A widening
+      above 5% anywhere is to be treated as a fault in the draw before it is treated as
+      finance.
+
+      Cost. On dev the twin takes 1.6 times the point model's fit-plus-simulate time per
+      origin, under the 5x at which the session prompt said to cut n_paths, so P7 keeps
+      10,000 paths and the Monte Carlo noise is P4's.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P3 and P4
+  crps_ratio_below: 1.0           # against zero_return_fhs on the same origins
+  conformal_window: 60            # as registered for P4
