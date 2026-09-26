@@ -225,7 +225,9 @@ def test_registry_still_maps_the_registered_names_to_the_registered_classes():
     for name, factory in BLOCK_REGISTRY.items():
         assert REGISTRY[name] is factory
         assert name in RETURN_VARIANCE
-    assert set(RETURN_VARIANCE) == set(REGISTERED) | set(BLOCK_REGISTRY)
+    # A subset, not an equality: Phase 7 adds its own names to the same tuple, and a test
+    # that pins the whole tuple fails on every later phase rather than on a real defect.
+    assert set(REGISTERED) | set(BLOCK_REGISTRY) <= set(RETURN_VARIANCE)
 
 
 def test_registered_models_keep_the_iid_draw():
