@@ -16,6 +16,10 @@ dependencies = [
     # Phase 2: GARCH-family conditional variance. Was dev-only in Phase 1, where it
     # existed only to check our Model Confidence Set against a second implementation.
     "arch>=8.0.0",
+    # Determinism: the GARCH optimiser's result depends on how many BLAS threads it
+    # runs with, and joblib gives workers a different thread count than an in-process
+    # run. Pinning it makes a fit reproducible regardless of n_jobs (P3-4).
+    "threadpoolctl>=3.1",
 ]
 
 [project.scripts]

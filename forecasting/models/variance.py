@@ -196,9 +196,15 @@ class GARCH(VarianceModel):
 
     def _fit_variance(self, v: np.ndarray) -> np.ndarray:
         from arch import arch_model  # imported here so the module loads without a fit
+        from threadpoolctl import threadpool_limits
 
         o = 1 if self.asymmetric else 0
-        with warnings.catch_warnings():
+        # One BLAS thread, always. The optimiser's arithmetic depends on the reduction
+        # order inside threaded linear algebra, and joblib hands workers a different
+        # thread count than an in-process run, so without this the same config produces
+        # different fits at different n_jobs. Measured before pinning: y_pred differing
+        # by up to 9e-4, and fits flipping across the stationarity boundary (P3-4).
+        with warnings.catch_warnings(), threadpool_limits(limits=1):
             warnings.simplefilter("ignore")
             am = arch_model(
                 v * SCALE, mean="Zero", vol="GARCH", p=1, o=o, q=1, dist="normal", rescale=False
