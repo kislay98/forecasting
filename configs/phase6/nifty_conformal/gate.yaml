@@ -1,0 +1,51 @@
+# Pre-registration for Phase 6, Nifty 50, conformal arm. Committed with
+# configs/phase6/gate.yaml, before any Phase 6 run; read that file first. It holds the
+# method, the block length rule, the 2 x 2 design, the rule for when a conclusion counts
+# as changed, and the rule for adopting the block sampler. None of it is repeated here.
+#
+# This arm re-asks P4: with split conformal calibration at window 60 applied to the
+# intervals, does the primary model pass? The rules are P4's unchanged. The run's
+# forecasts are identical to the uncorrected arm's; only the layer and the gate differ.
+phase: 4
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  nifty50:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch
+      - ewma_block
+      - garch_block
+      - gjr_garch_block
+    primary_model: gjr_garch_block
+    chosen_by: >
+      Not chosen: gjr_garch, P4's primary, with the block sampler. See
+      configs/phase6/gate.yaml.
+    expectation: >
+      Predicted: GO, as P4, with coverage after the correction within about one origin
+      in 200 (0.005) of the iid model's in the same run at every checked cell. The
+      reason is what the layer is: it adds one number per origin, level and horizon,
+      estimated from the model's own recent 60 errors. The block sampler's effect on
+      Nifty is a steady widening of about 10% at h = 20 (dev: 1.105, wider at every one
+      of 100 origins, range 1.05 to 1.18), and a steady width error is exactly what a
+      width correction removes. So the layer should hand back roughly the same interval
+      whichever sampler produced the raw one, and the P4 conclusion should not move.
+
+      The registered risk: that the correction does not fully absorb it. The layer is
+      additive at each quantile, and the block sampler changes the shape of the 20-day
+      distribution as well as its spread (dev median excess kurtosis for gjr_garch 3.53
+      iid, 2.52 block), so the 95% cells, already noisy under P4 (a third-largest-of-60
+      order statistic, P4-7), can land differently. If this arm returns NO-GO where the
+      iid model in the same run returns GO, the P4 conclusion depended on the sampler.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P3
+  crps_ratio_below: 1.0
+  crps_reference: zero_return_fhs
+  conformal_window: 60            # P4's, not re-chosen

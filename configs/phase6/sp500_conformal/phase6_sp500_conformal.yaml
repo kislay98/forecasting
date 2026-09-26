@@ -1,0 +1,29 @@
+# Phase 6, S&P 500, conformal arm: the same run as ../sp500/phase6_sp500.yaml, decided by
+# P5b's rules (P4's, split conformal, window 60). Read ./gate.yaml.
+seed: 20260926                        # Phase 4's seed, unchanged
+n_jobs: 4                             # parallel folds; not part of the run_id
+n_paths: 10000                        # simulated paths per fold; IS part of the run_id
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]
+series:
+  - id: sp500
+    source: csv:../../../data/sp500.csv
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01                   # as registered for Phase 5 (P5-3)
+    freq: trading_days
+    season: none
+    target: cumulative_returns          # log(p_t+h / p_t), as registered for Phase 3
+    H: 20
+    decision_horizons: [1, 5, 20]
+    origin_step: 20                     # non-overlapping, so independence is testable at h = 20
+    n_dev_origins: 100
+    n_test_origins: 200
+    models:
+      - zero_return_fhs                 # the registered CRPS comparator, iid draws
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch                       # the P5b primary, iid draws
+      - ewma_block
+      - garch_block
+      - gjr_garch_block                 # the P6 primary: gjr_garch with blocks of 10

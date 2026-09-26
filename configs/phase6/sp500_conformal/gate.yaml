@@ -1,0 +1,48 @@
+# Pre-registration for Phase 6, S&P 500, conformal arm. Committed with
+# configs/phase6/gate.yaml, before any Phase 6 run; read that file first. It holds the
+# method, the block length rule, the 2 x 2 design, the rule for when a conclusion counts
+# as changed, and the rule for adopting the block sampler. None of it is repeated here.
+#
+# This arm re-asks P5b: P4's rules, split conformal at window 60, on the S&P 500. P5b
+# returned GO, 21 of 21. The run's forecasts are identical to ../sp500/'s; only the layer
+# and the gate differ.
+phase: 4
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  sp500:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch
+      - ewma_block
+      - garch_block
+      - gjr_garch_block
+    primary_model: gjr_garch_block
+    chosen_by: >
+      Not chosen: gjr_garch, P5b's primary, with the block sampler. See
+      configs/phase6/gate.yaml.
+    expectation: >
+      Predicted: GO, as P5b, and for the same reason as the Nifty conformal arm: the
+      block sampler's effect on the S&P is a steady narrowing (dev h = 20 sd ratio 0.900,
+      narrower at every one of 100 origins), and a steady width error is what the layer
+      removes. Coverage after the correction is predicted within about 0.005 of the iid
+      model's in the same run at every checked cell.
+
+      The registered risk is specific to this market: P5b's layer had to widen at h = 1
+      and h = 5 (up to 1.238x at h = 5 and 95%) because the uncorrected model
+      under-covered there. The block sampler narrows h = 5 further (dev sd ratio 0.977 at
+      h = 5), so the layer has more to widen, from a window of 60 recent errors. If 95%
+      coverage at h = 5 ends outside [0.91, 0.98] after the correction where the iid
+      model's does not, the P5b conclusion depended on the sampler.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P3
+  crps_ratio_below: 1.0
+  crps_reference: zero_return_fhs
+  conformal_window: 60            # P4's and P5b's, not re-chosen

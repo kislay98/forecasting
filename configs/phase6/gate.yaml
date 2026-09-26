@@ -1,0 +1,115 @@
+# Pre-registration for Phase 6 (P6): block-bootstrap innovations, OP-2.
+# Committed before the first `forecast run` of any configs/phase6/ config.
+#
+# What P6 changes. Filtered historical simulation draws each day's standardised residual
+# independently. Ljung-Box rejects on every model's standardised residuals, so that
+# independence is false on this data, and every interval and expected shortfall of
+# Phases 3 to 5 is built on it. The block models draw runs of 10 consecutive standardised
+# residuals instead (forecasting/models/blocks.py). Nothing else differs: same fit, same
+# variance recursion along the path, same seed, same origins.
+#
+# The block length is 10, fixed by a rule stated here rather than fitted: it is the
+# Ljung-Box lag that established the dependence (M6-2 registers lag 10 for m = 1), so a
+# block carries every autocovariance that test reads and none beyond it. At H = 20 that
+# is two blocks per path. The n^(1/3) rate of Hall, Horowitz and Jing (1995) gives 8 to
+# 20 at these training sizes, so 10 is inside it, at the short end, which is the
+# conservative end for the risk named below. The scheme is the moving-block bootstrap,
+# not the stationary bootstrap, because at block length 1 it is the iid sampler to the
+# bit, and because the stationary bootstrap's advantage is for long resampled series,
+# not 20-day paths (P6-2). The gate schema has no key for the block length; it is
+# BLOCK_LENGTH in the code, and this file and the commit that adds it are its record.
+#
+# The design is 2 x 2: two markets, and the uncorrected and conformal layers, so that
+# each of the conclusions the study rests on is re-asked with nothing changed but the
+# sampler of the primary model.
+#
+#   configs/phase6/                   Nifty, uncorrected, P3's rules      (this file)
+#   configs/phase6/nifty_conformal/   Nifty, conformal 60, P4's rules
+#   configs/phase6/sp500/             S&P, uncorrected, P3's rules (P5b's diagnostic)
+#   configs/phase6/sp500_conformal/   S&P, conformal 60, P5b's rules
+#
+# How a conclusion counts as changed, fixed now: each run carries gjr_garch (iid) beside
+# gjr_garch_block, on the same origins and the same machine. The iid model's verdict under
+# the same rules, in the same run, is computed as a diagnostic, exactly as P5b computed
+# its uncorrected verdict. The sampler changes a conclusion where the two verdicts differ.
+# Comparing against the numbers recorded in P3 to P5b instead would mix the sampler with
+# a platform difference. The registered stores were written on another machine, and a
+# rerun of P4 on the machine these runs use differs from the registered store on every
+# GARCH-family row: by at most 6e-8 on the expanding window the decisions are read from,
+# and by up to 0.0037 with 260 fits flipping status on the rolling window (P6-4).
+#
+# Whether the block sampler replaces the iid one in future work, also fixed now: only if
+# it turns no iid GO into a NO-GO across the four arms, and its CRPS at h = 20 is below
+# gjr_garch's on both uncorrected arms. A tie is not enough; the change has to earn it.
+# P2 to P5 are not reopened whatever this finds (P6-5).
+#
+# The rules are P3's, unchanged: all four conditions at h = 1, 5 and 20 on the expanding
+# window, coverage bands, Kupiec and Christoffersen at the Sidak per-test level for
+# twelve tests, and CRPS against the flat comparator zero_return_fhs.
+phase: 3
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  nifty50:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch
+      - ewma_block
+      - garch_block
+      - gjr_garch_block
+    primary_model: gjr_garch_block
+    chosen_by: >
+      Not chosen. gjr_garch is the primary of P3, P4, P5b and their diagnostics, and
+      gjr_garch_block is that model with the block sampler and nothing else changed.
+      Selecting among the block models on dev would answer a different question, whether
+      some block model fits, and would confound the sampler with the model choice.
+    expectation: >
+      Measured on the 100 dev origins only (2002-06 to 2010-06), with
+      scripts/block_vs_iid.py, which fits each model once per origin and simulates both
+      samplers from that one fit with the same seed. Nothing here has seen a test origin.
+
+      Direction, the registered prediction: on Nifty the block sampler WIDENS the 20-day
+      distribution. For gjr_garch the sd of the h = 20 cumulative return is 1.105 times
+      the iid one (median over dev origins, range 1.051 to 1.178) and wider at 100 of 100
+      origins. The cause is linear: the standardised residuals carry positive
+      autocorrelation (lag 1 about 0.10), which the iid draw throws away and a block of
+      10 keeps. The autocorrelations alone predict 1.136.
+
+      Applied to the test window, where the iid model already over-covers (P3: 0.865 at
+      80% and h = 20, band [0.75, 0.85]), a wider interval over-covers more. Predicted:
+      NO-GO, on the same cell as P3, by more, with 80% coverage at h = 20 of about 0.88
+      to 0.90, and 95% coverage at h = 20 at risk of leaving its band as well. The CRPS
+      of gjr_garch_block at h = 20 is predicted to be above gjr_garch's in the same run,
+      so the block sampler is predicted not to be adopted. The conclusion "the model
+      over-covers at a month" is predicted to survive the sampler fix and to get worse,
+      which would mean the over-coverage is not an artefact of iid sampling.
+
+      The registered risk to that prediction is the opposite: that the widening is
+      earned. If the positive autocorrelation the training residuals carry is still in
+      the test window's returns, the block model's CRPS at h = 20 comes in below the iid
+      model's even while its coverage looks worse. On dev the two are level (CRPS ratio
+      1.003 at h = 20, 0.999 at h = 1), and the block model moved dev coverage at h = 20
+      from 0.78 to 0.80, toward nominal. Dev is the volatile window where the iid model
+      under-covered, so dev favours widening, and test is not dev.
+
+      The trap the prompt names, double counting, is registered as a second, separate
+      prediction. A GARCH path already clusters, so clustered blocks can count
+      persistence twice and inflate the spread past what the autocorrelation explains,
+      and the kurtosis with it. On dev that happens for ewma and not for gjr_garch:
+      ewma's sd ratio is 1.171 against 1.144 from autocorrelation alone, and the median
+      excess kurtosis of its 20-day return goes from 1.73 to 5.42 (its standardised
+      residuals keep clustering, lag-1 autocorrelation of z^2 0.077, which a fixed
+      lambda does not remove). gjr_garch's sd ratio, 1.105, is below its 1.136, and its
+      median kurtosis falls, 3.53 to 2.52 (lag-1 autocorrelation of z^2 0.000). Predicted
+      on test: the same split, double counting in ewma_block and not in gjr_garch_block.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P3
+  crps_ratio_below: 1.0
+  crps_reference: zero_return_fhs # named, as P5-8 asks, and the same comparator as P3

@@ -1,0 +1,60 @@
+# Pre-registration for Phase 6, S&P 500, uncorrected arm. Committed with
+# configs/phase6/gate.yaml, before any Phase 6 run; read that file first. It holds the
+# method, the block length rule, the 2 x 2 design, the rule for when a conclusion counts
+# as changed, and the rule for adopting the block sampler. None of it is repeated here.
+#
+# This arm re-asks the diagnostic P5b ran on its own uncorrected run: P3's rules applied
+# to the S&P 500. That diagnostic returned NO-GO on one check, 95% coverage at h = 20
+# (0.985 against [0.91, 0.98]), and P5-12 read it as the Nifty failure recurring on a
+# second market. This arm asks whether that recurrence survives the sampler fix.
+phase: 3
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  sp500:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch
+      - ewma_block
+      - garch_block
+      - gjr_garch_block
+    primary_model: gjr_garch_block
+    chosen_by: >
+      Not chosen: gjr_garch, P5b's primary, with the block sampler. See
+      configs/phase6/gate.yaml.
+    expectation: >
+      Measured on the 100 S&P dev origins only (2002-11 to 2010-09) with
+      scripts/block_vs_iid.py. The direction is the opposite of Nifty's, and that is the
+      registered prediction worth the most: on the S&P the block sampler NARROWS the
+      20-day distribution. For gjr_garch the h = 20 sd ratio is 0.900 (median, range 0.853
+      to 0.954), narrower at 100 of 100 dev origins. The standardised residuals' lag-1
+      autocorrelation is near zero (0.006) but most of the next lags are negative (lags 2
+      to 5 and 7, down to -0.037 at lag 5), and the autocorrelations alone predict
+      0.949. The recursion adds to the narrowing here rather than to the width, so this
+      market has no double counting to find in gjr_garch; ewma_block again shows the
+      largest kurtosis gain (median 1.24 to 1.59).
+
+      Predicted: the narrowing repairs the cell the iid model fails. 95% coverage at
+      h = 20 comes down from about 0.985 into [0.91, 0.98], and the arm returns GO where
+      the iid model in the same run returns NO-GO. That would change a conclusion: the
+      S&P half of P5-12, "the failure recurred on its own", would be in part a product of
+      the iid sampler. Predicted also: the block model's CRPS at h = 20 below gjr_garch's
+      (dev: 0.994 at h = 20, with 80% coverage at h = 20 moving from 0.89 to 0.84).
+
+      The registered risk is overshoot. The iid model already sits low at the shorter
+      horizons in P5b's diagnostic (80%: 0.795 at h = 1, 0.785 at h = 5; 95%: 0.935 at
+      h = 5), and h = 5 is narrowed too, though less (dev sd ratio 0.977 at h = 5
+      against 0.900 at h = 20). If 80% coverage at h = 5 drops below 0.75, or 95% below
+      0.91, the arm returns NO-GO on a new cell: the sampler would have moved the failure
+      rather than removed it.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P3
+  crps_ratio_below: 1.0
+  crps_reference: zero_return_fhs
