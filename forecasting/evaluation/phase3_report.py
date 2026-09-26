@@ -92,7 +92,7 @@ def fan_chart(frame: pd.DataFrame, model: str, window: str, out: Path) -> Path |
 
 
 def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> str:
-    frame = ForecastStore.read(run_dir / "forecasts.parquet").frame
+    frame = ForecastStore.read(run_dir / "forecasts.parquet").frame()
     manifest = json.loads((run_dir / "manifest.json").read_text())
     scfg = cfg.series[0]
     window = gate.primary_window if gate else "expanding"
