@@ -1,0 +1,153 @@
+{
+  "config": {
+    "levels": [
+      0.5,
+      0.8,
+      0.9,
+      0.95,
+      0.99
+    ],
+    "n_paths": 10000,
+    "seed": 20260926,
+    "series": [
+      {
+        "H": 20,
+        "columns": {
+          "date": "Date",
+          "id": null,
+          "value": "Close"
+        },
+        "date_format": "%d %b %Y",
+        "decision_horizons": [
+          1,
+          5,
+          20
+        ],
+        "duplicates": "error",
+        "freq": "trading_days",
+        "id": "nifty50",
+        "initial_window": 500,
+        "m": 1,
+        "models": [
+          "zero_return_fhs",
+          "ewma",
+          "garch_normal",
+          "garch",
+          "gjr_garch"
+        ],
+        "n_dev_origins": 100,
+        "n_test_origins": 200,
+        "origin_step": 20,
+        "positive": false,
+        "rolling_length": 500,
+        "sarima_search": "stepwise",
+        "sma_windows": [
+          5,
+          20,
+          60,
+          250
+        ],
+        "source": "csv:../../data/nifty50.csv",
+        "start": "1996-01-01",
+        "target": "cumulative_returns",
+        "transform": "none",
+        "warmup_models": "baselines",
+        "window": "both"
+      }
+    ]
+  },
+  "content_hash": "f167a6f453bdd6447b11e99567511d4f3e9f0da4d22a5968c487c01e1c7f757f",
+  "created_utc": "2026-09-26T09:53:33+00:00",
+  "data_hashes": {
+    "nifty50": "e4af01c57f472c30da5ef3387e0ea4fd9c04392579492b697f88530b1d9a1cdd"
+  },
+  "gate": {
+    "alpha": 0.05,
+    "commit": "584e3336445f368c63641aa142edbc67e00fb277",
+    "committed": true,
+    "path": "/sessions/rcw-01poa2m8wyjxtmwpawx8m3rt/mnt/forecasting/configs/phase4/gate.yaml",
+    "present": true,
+    "primary_window": "expanding",
+    "registered": "2026-09-26",
+    "sha256": "14a5a0afd8bd1da84523a8c08810c726af35694fd1344217ea7c310b17b62ce7"
+  },
+  "git": "09fb68aeda35d255ebd9f768b4a648a7115b9154-dirty-ac702ce0",
+  "plans": {
+    "nifty50": {
+      "initial_window": 500,
+      "mode": "full",
+      "n_dev": 100,
+      "n_origins": 355,
+      "n_test": 200,
+      "n_warmup": 55,
+      "origin_step": 20,
+      "reduced": false,
+      "windows": [
+        "expanding",
+        "rolling"
+      ]
+    }
+  },
+  "rows": {
+    "failed": 480,
+    "ok": 63920,
+    "total": 64400
+  },
+  "run_id": "4a5899ec5e37c363",
+  "selections": {
+    "best_baseline": {},
+    "best_candidate": {
+      "nifty50": {
+        "expanding": {
+          "dev_mase": 2.4576566084254834,
+          "model": "zero_return_fhs",
+          "ranking": [
+            "zero_return_fhs",
+            "gjr_garch",
+            "garch_normal",
+            "garch",
+            "ewma"
+          ],
+          "scores": {
+            "ewma": 2.464146329747966,
+            "garch": 2.4599719700158884,
+            "garch_normal": 2.4593493744038732,
+            "gjr_garch": 2.4577073981437976,
+            "zero_return_fhs": 2.4576566084254834
+          },
+          "with_intervals": "zero_return_fhs"
+        },
+        "rolling": {
+          "dev_mase": 2.527654395156255,
+          "model": "zero_return_fhs",
+          "ranking": [
+            "zero_return_fhs",
+            "ewma",
+            "gjr_garch",
+            "garch_normal",
+            "garch"
+          ],
+          "scores": {
+            "ewma": 2.5461640365404636,
+            "garch": 2.6366299987645845,
+            "garch_normal": 2.6332086294270134,
+            "gjr_garch": 2.5671117500579776,
+            "zero_return_fhs": 2.527654395156255
+          },
+          "with_intervals": "zero_return_fhs"
+        }
+      }
+    },
+    "sma": {}
+  },
+  "versions": {
+    "forecasting": "0.1.0",
+    "joblib": "1.6.0",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.13.15",
+    "scipy": "1.18.1"
+  },
+  "warnings": []
+}
