@@ -16,6 +16,7 @@ from forecasting.models.baselines import (
     SeasonalNaive,
     ZeroReturn,
 )
+from forecasting.models.parameter_uncertainty import GARCHPU, GJRGARCHPU
 from forecasting.models.statistical import (
     SES,
     ARAuto,
@@ -49,6 +50,8 @@ REGISTRY: dict[str, ModelFactory] = {
     "garch_normal": lambda m: GARCHNormal(),
     "garch": lambda m: GARCH(),
     "gjr_garch": lambda m: GJRGARCH(),
+    "garch_pu": lambda m: GARCHPU(),  # Phase 7: parameters drawn per path (OP-3)
+    "gjr_garch_pu": lambda m: GJRGARCHPU(),
 }
 DERIVED = ("combination",)
 
