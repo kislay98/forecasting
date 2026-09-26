@@ -1,0 +1,78 @@
+# Pre-registration for the Phase 2 lite gate (P2), committed before the first
+# `forecast run configs/phase2/phase2.yaml` that scores test origins.
+#
+# Phase 1 settled the mean for Nifty 50: h* = 0, nothing beat a zero-return forecast.
+# So Phase 2 does not forecast the mean at all. The interval is the product and
+# calibration is the scoreboard. The electricity control does not come along (P2-1).
+#
+# The multiplicity correction runs the OPPOSITE way to Phase 1, and getting this
+# backwards is how the electricity control died. There, passing meant rejecting a
+# null, so Holm made the gate harder. Here, passing means FAILING to reject, so a
+# correction that widens each test makes the gate easier. Requiring several tests to
+# pass is a conjunction: eight tests at 0.05 each would fail a perfectly calibrated
+# model about 34% of the time. per_test_alpha is therefore Sidak-corrected DOWNWARDS:
+# 1 - 0.95^(1/8) = 0.0064, for a 5% family-wise false-failure rate over the eight
+# tests below.
+#
+# The decision, on test origins of the expanding window, for the primary model only.
+# All four conditions must hold:
+#   1. coverage   empirical coverage inside coverage_80 and coverage_95, at h = 1 and 5
+#   2. Kupiec     not rejected at per_test_alpha, at h in {1, 5} x levels {80, 95}
+#   3. independence  Christoffersen not rejected at per_test_alpha, same eight cells
+#   4. sharpness  CRPS below crps_ratio_below times zero_return's, at h = 1 and 5
+# Kupiec's effective sample is n / max(1, h / origin_step): at step 5 there is no
+# overlap at h = 1 or h = 5, so no discount applies there (P2-4 corrects the earlier
+# n / h, which was five times too generous at h = 5).
+#
+# Reading rule, registered in advance: a Kupiec rejection accompanied by an
+# independence rejection in the same cell is read as clustering, not as wrong average
+# coverage, because Kupiec is over-sized on dependent exceedances (P2-3, measured 18%
+# against a nominal 5%). This changes the write-up, never the verdict. A failure is a
+# failure.
+#
+# h = 20 is reported and is not part of the decision: independence needs
+# origin_step >= h and the step is 5, so at h = 20 it cannot be tested (P2-4).
+phase: 2
+registered: 2026-09-26
+alpha: 0.05                       # family-wise false-failure rate over the eight tests
+primary_window: expanding         # rolling is reported, and answers nothing here
+series:
+  nifty50:
+    decision_horizons: [1, 5]
+    models:
+      - zero_return               # Phase 1's: constant variance, Normal tails
+      - zero_return_fhs           # empirical tails only
+      - ewma                      # conditional variance only, no fitted parameters
+      - garch_normal              # conditional variance only, fitted
+      - garch                     # both
+      - gjr_garch                 # both, with leverage
+    primary_model: ewma
+    chosen_by: >
+      Lowest CRPS at h = 1 on the expanding window over the 200 dev origins of the
+      exploratory run b4c52afb050d9991 (2014-06-30 to 2018-07-12): ewma 0.8085 of
+      zero_return's, garch 0.8117, gjr_garch 0.8109, garch_normal 0.8227,
+      zero_return_fhs 0.8865. That margin over garch is 0.4% and is not on its own
+      decisive. The stronger dev evidence is coverage: ewma was the only model whose
+      80% coverage was not rejected at all three of h = 1, 5 and 20, and the only one
+      still calibrated at h = 5, where garch had already drifted to 0.875 against a
+      nominal 0.80.
+    expectation: >
+      The interval widths track the current volatility level rather than the whole
+      history, so coverage lands near nominal instead of far above it. Phase 1's
+      zero_return took 4 misses where 40 were expected on the same dev origins, so
+      any conditional model should be a large improvement on that.
+
+      The registered risk, stated before seeing any test origin: the dev window
+      realises 13.4% annualised volatility against 22.5% over the full sample, which
+      makes it the calmest stretch in the data, and ewma was selected on it. The test
+      window contains 2020. EWMA's forecast is flat in the horizon and never reverts,
+      so if it fails, the likely failure is under-coverage concentrated in the
+      volatility spike, showing up as clustered misses that Christoffersen catches
+      even where the calm years either side rescue Kupiec's average. If that is what
+      happens, the honest result is that the calm-period winner did not survive a
+      shock, not a switch to whichever model did.
+thresholds:
+  coverage_80: [0.75, 0.85]       # as registered for Phase 1 (research 8.5)
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0064          # Sidak, 8 tests, 5% family-wise
+  crps_ratio_below: 1.0           # against zero_return on the same origins

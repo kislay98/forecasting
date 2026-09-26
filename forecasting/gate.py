@@ -47,16 +47,33 @@ REQUIRED_THRESHOLDS = {
     "leakage_gain_over_ets",
 }
 
+# Phase 2 asks a different question, so it registers different thresholds. `phase` is
+# optional and defaults to 1, which keeps every Phase 1 gate loading exactly as before.
+REQUIRED_TOP_P2 = REQUIRED_TOP | {"phase"}
+REQUIRED_THRESHOLDS_P2 = {
+    "coverage_80",
+    "coverage_95",
+    "per_test_alpha",
+    "crps_ratio_below",
+}
+PHASES = (1, 2)
+
 
 @dataclass(frozen=True)
 class SeriesGate:
     decision_horizons: tuple[int, ...]
     models: tuple[str, ...]
     expectation: str = ""
+    # Phase 2 only. The one model the gate bets on, and the dev-set rule that picked it.
+    # The rule is recorded so the next study inherits the method; the bet is the model
+    # name, so it cannot be reinterpreted after the test origins are scored.
+    primary_model: str = ""
+    chosen_by: str = ""
 
 
 @dataclass(frozen=True)
 class Gate:
+    phase: int
     registered: str
     alpha: float
     primary_window: str
@@ -79,8 +96,12 @@ def load_gate(path: str | Path) -> Gate:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise _bad("", "not a mapping")
-    missing = REQUIRED_TOP - set(raw)
-    extra = set(raw) - REQUIRED_TOP
+    phase = raw.get("phase", 1)
+    if phase not in PHASES:
+        raise _bad("phase", f"must be one of {list(PHASES)}")
+    required_top = REQUIRED_TOP_P2 if phase == 2 else REQUIRED_TOP
+    missing = required_top - set(raw)
+    extra = set(raw) - required_top
     if missing or extra:
         raise _bad("", f"missing keys {sorted(missing)}, unknown keys {sorted(extra)}")
     alpha = raw["alpha"]
@@ -89,8 +110,18 @@ def load_gate(path: str | Path) -> Gate:
     if raw["primary_window"] not in ("expanding", "rolling"):
         raise _bad("primary_window", "must be expanding or rolling")
     th = raw["thresholds"]
-    if not isinstance(th, dict) or set(th) != REQUIRED_THRESHOLDS:
-        raise _bad("thresholds", f"keys must be exactly {sorted(REQUIRED_THRESHOLDS)}")
+    required_th = REQUIRED_THRESHOLDS_P2 if phase == 2 else REQUIRED_THRESHOLDS
+    if not isinstance(th, dict) or set(th) != required_th:
+        raise _bad("thresholds", f"keys must be exactly {sorted(required_th)}")
+    if phase == 2:
+        pta = th["per_test_alpha"]
+        if not isinstance(pta, int | float) or not 0 < pta <= alpha:
+            raise _bad(
+                "thresholds.per_test_alpha",
+                "must be in (0, alpha]. Passing a calibration gate means failing to "
+                "reject, so requiring several tests to pass is a conjunction: the "
+                "per-test level has to be tightened below the family rate, not loosened",
+            )
     for key in ("coverage_80", "coverage_95"):
         band = th[key]
         if not (isinstance(band, list) and len(band) == 2 and 0 < band[0] < band[1] < 1):
@@ -101,14 +132,24 @@ def load_gate(path: str | Path) -> Gate:
     for uid, s in raw["series"].items():
         if not isinstance(s, dict) or not {"decision_horizons", "models"} <= set(s):
             raise _bad(f"series.{uid}", "needs decision_horizons and models")
-        if set(s) - {"decision_horizons", "models", "expectation"}:
-            raise _bad(f"series.{uid}", "unknown key")
+        allowed_keys = {"decision_horizons", "models", "expectation"}
+        if phase == 2:
+            allowed_keys |= {"primary_model", "chosen_by"}
+        if set(s) - allowed_keys:
+            raise _bad(f"series.{uid}", f"unknown key; allowed: {sorted(allowed_keys)}")
+        if phase == 2 and "primary_model" not in s:
+            raise _bad(
+                f"series.{uid}.primary_model", "a phase 2 gate must name the model it bets on"
+            )
         series[uid] = SeriesGate(
             decision_horizons=tuple(int(h) for h in s["decision_horizons"]),
             models=tuple(str(m) for m in s["models"]),
             expectation=str(s.get("expectation", "")),
+            primary_model=str(s.get("primary_model", "")),
+            chosen_by=str(s.get("chosen_by", "")),
         )
     return Gate(
+        phase=int(phase),
         registered=str(raw["registered"]),
         alpha=float(alpha),
         primary_window=str(raw["primary_window"]),
@@ -139,6 +180,11 @@ def check_gate(gate: Gate, cfg: RunConfig) -> None:
             )
         if gate.primary_window not in scfg.windows:
             raise _bad("primary_window", f"{gate.primary_window} is not run for {scfg.id}")
+        if gate.phase == 2 and g.primary_model not in g.models:
+            raise _bad(
+                f"series.{scfg.id}.primary_model",
+                f"'{g.primary_model}' is not in the registered model list {list(g.models)}",
+            )
 
 
 def _git(args: list[str], cwd: Path) -> str:
