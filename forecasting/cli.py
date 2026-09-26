@@ -102,6 +102,15 @@ def cmd_run(config_path: Path, force: bool = False, out=None) -> int:
         f"skipped {rows.get('skipped', 0)})",
         file=out,
     )
+    a4 = man.get("a4")
+    if a4 is not None:
+        by_window = ", ".join(f"{w} {v:.3%}" for w, v in a4["failed_share_by_window"].items())
+        verdict = "within" if a4["passed"] else "OVER"
+        print(
+            f"A4: {a4['failed_share']:.2%} of rows failed, {verdict} the "
+            f"{a4['limit']:.0%} the spec allows ({by_window})",
+            file=out,
+        )
     print(f"store: {result.path / 'forecasts.parquet'}", file=out)
     print(f"report: {report_run(result.path)}", file=out)
     gate = man["gate"]

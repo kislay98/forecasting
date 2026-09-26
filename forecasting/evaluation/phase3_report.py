@@ -108,6 +108,17 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
         f"{window} window, {cfg.n_paths:,} simulated paths per origin."
     )
     a("")
+    failed = frame["status"].ne("ok")
+    in_window = frame["window"].eq(window)
+    a4_all = float(failed.mean()) if len(frame) else 0.0
+    a4_win = float(failed[in_window].mean()) if int(in_window.sum()) else 0.0
+    a(
+        f"Acceptance check A4: {a4_all:.2%} of the run's rows are typed failures against a "
+        f"1% limit, and {a4_win:.2%} on the {window} window this decision is read from. A "
+        f"failure on the other window cannot reach the numbers below, but it is stated here "
+        f"rather than left in the manifest."
+    )
+    a("")
     quantity = (
         "the cumulative move over h trading days, log(p_t+h / p_t)"
         if scfg.target == "cumulative_returns"

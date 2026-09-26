@@ -18,6 +18,8 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from forecasting.backtest.engine import run_backtest
 from forecasting.backtest.selection import (
     select_best_baseline,
@@ -132,6 +134,33 @@ def plan_summary(plan, scfg: SeriesConfig, mode: str = "full") -> dict[str, Any]
     }
 
 
+A4_MAX_FAILED_SHARE = 0.01
+
+
+def a4_status(frame: pd.DataFrame) -> dict[str, Any]:
+    """Acceptance check A4, measured on every real run instead of taken on trust.
+
+    The spec's pass condition has two halves: every (origin, model, h) yields a row or a
+    logged, typed failure, and failures stay under 1% of rows. The synthetic acceptance
+    test covers the first half. Until this function existed the second half was checked
+    by reading the run summary, which is not a check.
+
+    Reported per window as well as overall, because a decision is read from one window
+    and a failure in the other cannot reach it. Phase 5b is the case that forced this:
+    1.29% of its rows failed, all of them rolling-window GARCH fits at the stationarity
+    boundary, with 0.000% on the expanding window the decision came from.
+    """
+    failed = frame["status"].ne("ok")
+    share = float(failed.mean()) if len(frame) else 0.0
+    by_window = {str(w): round(float(g.mean()), 5) for w, g in failed.groupby(frame["window"])}
+    return {
+        "failed_share": round(share, 5),
+        "limit": A4_MAX_FAILED_SHARE,
+        "passed": share < A4_MAX_FAILED_SHARE,
+        "failed_share_by_window": by_window,
+    }
+
+
 def build_manifest(
     cfg: RunConfig,
     frame,
@@ -162,6 +191,7 @@ def build_manifest(
             "best_candidate": select_best_candidate(frame),
         },
         "rows": {"total": len(frame), **{k: int(v) for k, v in counts.items()}},
+        "a4": a4_status(frame),
         "content_hash": content_hash(frame),
         "gate": gate if gate is not None else {"present": False},
         "warnings": list(warnings),

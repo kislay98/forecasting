@@ -124,8 +124,12 @@ uncorrected numbers, 0.911, 0.946, 0.905, say it more strongly.
   clustered return series, the window was not tuned, and at the 95% level the correction is
   a third-largest-of-60 order statistic and should carry no weight on its own. The 1.132x
   and 1.238x widenings at h = 1 and h = 5 are at that level and are probably mostly noise.
-- 840 rows failed, all GARCH-family fits at the stationarity boundary. The decision uses
-  the expanding window. Same limitation as P2-18.
+- 840 rows failed, all GARCH-family fits at the stationarity boundary, all on the rolling
+  window. That is 1.29% of the run, over the 1% the spec's acceptance check A4 allows, and
+  it is the first run in the study to breach it. On the expanding window this decision is
+  read from the rate is 0.000%, so the breach cannot reach any number above, but it is a
+  breach and it went unnoticed until A4 was made a computed check rather than a line in the
+  run summary (P5-17). Same underlying limitation as P2-18.
 - Two markets is two, and they are both large-cap equity indices with a common global
   factor. Their 2008 and 2020 are the same 2008 and 2020, so these are not independent
   samples in the way two seeds of a simulation are.

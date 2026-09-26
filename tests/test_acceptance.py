@@ -22,9 +22,16 @@ import time
 import numpy as np
 import pytest
 
+from forecasting import pipeline
 from forecasting.evaluation.report import build_report
 from forecasting.evaluation.scoring import pairwise, score
-from tests.acceptance import LEVEL_MODELS_FULL, SyntheticRun, backtest_synthetic, beats_naive
+from tests.acceptance import (
+    LEVEL_MODELS_CHEAP,
+    LEVEL_MODELS_FULL,
+    SyntheticRun,
+    backtest_synthetic,
+    beats_naive,
+)
 from tests.synthetic import local_linear_trend, random_walk, seasonal_ar1
 
 M, H = 12, 12
@@ -170,3 +177,27 @@ def test_known_answer_processes_are_what_they_claim():
     assert acf_m > 0.9
     llt_ = local_linear_trend(n=150, seed=3)
     assert np.polyfit(np.arange(150), llt_, 1)[0] > 0
+
+
+def test_A4_failed_share_is_measured_not_trusted():
+    """A4's second half, the 1% cap, on the run rather than in the run summary's prose.
+
+    Phase 5b forced this: 1.29% of its rows were typed failures, all rolling-window GARCH
+    fits, with none on the expanding window its decision came from. Nothing in the code
+    noticed, because until now A4 was only asserted on synthetic runs where no model
+    fails. The status is computed for every run and recorded in the manifest.
+    """
+    run = backtest_synthetic(random_walk(n=150, seed=1), models=LEVEL_MODELS_CHEAP, uid="a4")
+    a4 = run.manifest["a4"]
+    assert a4["limit"] == 0.01
+    assert a4["passed"] is True
+    assert a4["failed_share"] == 0.0
+    assert set(a4["failed_share_by_window"]) == {run.window}
+
+    # A frame with 2% typed failures must be reported as over the limit, per window.
+    frame = run.frame.copy()
+    n = len(frame)
+    frame.loc[frame.index[: int(0.02 * n)], "status"] = "failed"
+    bad = pipeline.a4_status(frame)
+    assert bad["passed"] is False
+    assert bad["failed_share"] >= 0.02
