@@ -112,8 +112,9 @@ def _run_fold(
 
     def emit(
         model: str, pred, lo, hi, level_pred, status, error, transform, variant, secs, info,
-        diag=NO_DIAG,
+        diag=NO_DIAG, es=None,
     ):  # fmt: skip
+        es = es or {}
         n_train, n_out, scale = info
         rows = {
             "run_id": [run_id] * H,
@@ -132,6 +133,7 @@ def _run_fold(
         for tag in tags:
             rows[f"lo_{tag}"] = list(lo.get(tag, [np.nan] * H))
             rows[f"hi_{tag}"] = list(hi.get(tag, [np.nan] * H))
+            rows[f"es_{tag}"] = list(es.get(tag, [np.nan] * H))
         rows.update(
             {
                 "level_true": list(level_true),
@@ -236,15 +238,26 @@ def _run_fold(
         paths = np.cumsum(np.asarray(model.simulate(H, n_paths, rng), dtype=float), axis=1)
         if paths.shape != (n_paths, H):
             raise ForecastContractError(f"{name}: simulate returned {paths.shape}")
-        lower, upper = {}, {}
+        lower, upper, shortfall = {}, {}, {}
         for lv in levels:
             lo_q, hi_q = np.quantile(paths, [(1 - lv) / 2, (1 + lv) / 2], axis=0)
             lower[lv], upper[lv] = lo_q, hi_q
+            # Expected shortfall: the mean of the paths at or below the lower bound, per
+            # horizon. Computed here because this is the only place the paths exist; a
+            # ten-point quantile grid cannot recover it afterwards.
+            below = paths <= lo_q[None, :]
+            counts = below.sum(axis=0)
+            with np.errstate(invalid="ignore"):
+                shortfall[lv] = np.where(counts > 0, (paths * below).sum(axis=0) / counts, np.nan)
         return ForecastResult(
             mean=paths.mean(axis=0),
             lower=lower,
             upper=upper,
-            info={"variant": getattr(model, "variant", ""), "n_paths": n_paths},
+            info={
+                "variant": getattr(model, "variant", ""),
+                "n_paths": n_paths,
+                "es": shortfall,
+            },
         )
 
     # 5: one fresh model per (window, origin, model).
@@ -266,12 +279,16 @@ def _run_fold(
             lo = {level_tag(k): np.asarray(v, dtype=float) for k, v in res.lower.items()}
             hi = {level_tag(k): np.asarray(v, dtype=float) for k, v in res.upper.items()}
             mean, lo, hi = back(tr, mean_t, lo, hi)
+            es_out = {
+                level_tag(k): np.asarray(v, dtype=float)
+                for k, v in (res.info.get("es") or {}).items()
+            }
             level_pred = implied_prices(mean)
             if name in MEMBERS:
                 member_means[name] = mean_t
             diag = residual_tests(model.residuals(), m) if origin.role == "test" else NO_DIAG
             emit(name, mean, lo, hi, level_pred, "ok", "", tr_label, variant,
-                 time.perf_counter() - t0, info, diag)  # fmt: skip
+                 time.perf_counter() - t0, info, diag, es_out)  # fmt: skip
         except MODEL_FAILURES as e:
             if name in MEMBERS:
                 member_means[name] = None

@@ -155,6 +155,49 @@ def cmd_report(target: Path, out=None) -> int:
     return _report(run_dir, out)
 
 
+def cmd_risk(target: Path, out=None) -> int:
+    """Phase 3: write the holding-period risk report for a run."""
+    import json
+
+    from forecasting.evaluation import phase3_report
+    from forecasting.evaluation.report import gate_state
+    from forecasting.gate import gate_path, load_gate
+
+    out = out or sys.stdout
+    if target.is_dir():
+        run_dir = target
+        cfg = load_config(Path(json.loads((run_dir / "manifest.json").read_text())["config"]))
+    else:
+        cfg, validated = _load(target, out)
+        if validated is None:
+            return 2
+        if validated.failed:
+            _print_validation(validated, out, reports=False)
+            return 1
+        rid, _ = compute_run_id(cfg, [s for _, s, _ in validated.ok])
+        run_dir = cfg.output_path / rid
+    if not (run_dir / "manifest.json").exists():
+        print(f"no run at {run_dir}: run `forecast run` first", file=out)
+        return 2
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    gate, why = gate_state(manifest)
+    if gate is None and manifest.get("gate", {}).get("committed"):
+        # gate_state declines a calibration gate on purpose, because the Phase 1 report
+        # cannot issue its decision. This report can.
+        try:
+            g = load_gate(gate_path(cfg))
+            if g.phase >= 2 and g.sha256 == manifest["gate"].get("sha256"):
+                gate, why = (
+                    g,
+                    f"gate.yaml {g.sha256[:12]}, commit {manifest['gate'].get('commit', '')[:12]}",
+                )
+        except Exception as e:
+            why = f"{why}; and it does not load now: {e}"
+    path = phase3_report.write(run_dir, cfg, gate, why)
+    print(f"risk report: {path}", file=out)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="forecast")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -163,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="validate, backtest every series, write the forecast store")
     r.add_argument("config", type=Path)
     r.add_argument("--force", action="store_true", help="redo a run whose directory exists")
+    k = sub.add_parser("risk", help="Phase 3: holding-period VaR and expected shortfall")
+    k.add_argument("target", type=Path, help="a config path or a run directory")
     p = sub.add_parser("report", help="rebuild a run's report from its store (no refits)")
     p.add_argument("target", type=Path, help="a run directory, or the config of the run")
     args = parser.parse_args(argv)
@@ -172,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(args.config, force=args.force)
     if args.command == "report":
         return cmd_report(args.target)
+    if args.command == "risk":
+        return cmd_risk(args.target)
     return 2  # pragma: no cover
 
 

@@ -73,6 +73,7 @@ def _toy_window(target: str, seed: int, window: str, k: int) -> pd.DataFrame:
                         "y_pred": yp,
                         "lo_80": yp - 1.0 if has_iv else np.nan, "hi_80": yp + 1.0 if has_iv else np.nan,
                         "lo_95": yp - 2.0 if has_iv else np.nan, "hi_95": yp + 2.0 if has_iv else np.nan,
+                        "es_80": np.nan, "es_95": np.nan,
                         "level_true": np.nan, "level_pred": np.nan, "mase_scale": 1.0,
                         "n_train": t + 1, "n_outliers": 0, "n_resid": 40 if test else 0,
                         "lb_p": diag_rng.uniform() if test else np.nan, "lb_p_2m": np.nan,

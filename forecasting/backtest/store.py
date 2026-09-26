@@ -67,7 +67,12 @@ def level_tag(level: float) -> str:
 def columns_for(levels: tuple[float, ...]) -> list[tuple[str, str]]:
     ivals = []
     for lv in sorted(levels):
-        ivals += [(f"lo_{level_tag(lv)}", "float"), (f"hi_{level_tag(lv)}", "float")]
+        tag = level_tag(lv)
+        # es_ is the mean of the simulated outcomes below the lower bound: what the loss
+        # looks like given that the interval was breached downwards. It is populated only
+        # by a simulated (cumulative) target, because a two-sided analytic interval does
+        # not carry the shape of its own tail.
+        ivals += [(f"lo_{tag}", "float"), (f"hi_{tag}", "float"), (f"es_{tag}", "float")]
     return BASE_COLUMNS + ivals + TAIL_COLUMNS
 
 
