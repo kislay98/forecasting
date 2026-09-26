@@ -1,11 +1,13 @@
 # forecasting
 
-Can any forecasting model beat a simle guess like "tomorrow will be like today" on real data, once every
+Can any forecasting model beat a simple guess like "tomorrow will be like today" on real data, once every
 way of cheating with future information has been ruled out?
 
-This project answers that question for two series:
+This project answers that question for three series:
 
 - **Nifty 50** (India's stock index, daily)
+- **S&P 500** (America's, daily): a second market, used to check whether the answers
+  found on the first one hold anywhere else.
 - **US electricity and gas output** (monthly, from FRED): a control with real seasonal
   structure, included to prove the machinery can see a pattern when there is one.
 
@@ -22,8 +24,8 @@ periods come in runs. That is the one thing worth modelling next.
 statistical rule we fixed in advance, that gain is just short of significant (the rule
 was applied as written; we did not move it).
 
-The written decision is in [docs/gate_decision.md](docs/gate_decision.md), with the full
-report and figures in [docs/phase1_report/](docs/phase1_report/).
+The decision is [here](docs/gate_decision.md), report and figures are
+[here](docs/phase1_report/).
 
 ## Why you can trust the "no"
 
@@ -38,6 +40,36 @@ the model. This harness is built so that cannot happen quietly:
 - The rules for declaring success were written down and committed **before** the real
   test data were scored, and the report refuses to issue a decision if they changed.
 - Two independent runs produced the same 569,176 forecasts byte for byte.
+
+## What happened next
+
+Direction turned out to be a dead end, so the later rounds ask a different question: not
+where the price will go, but how far it might move, and whether that range can be
+trusted. A range is trustworthy if the real move lands inside it about as often as the
+range claims, and if the misses are scattered rather than bunched into bad weeks.
+
+Each round wrote its rule down and committed it before scoring any test data, so every
+answer below is a rule applied, not a result found.
+
+| Round | Question | Answer |
+|---|---|---|
+| [1](docs/gate_decision.md) | Can any model beat "tomorrow will be like today"? | **No** on the Nifty. The control sees its season. |
+| [2](docs/phase2_decision.md) | Can a range that tracks current volatility be trusted a day and a week out? | **Yes.** A flat range built from all of history cannot. |
+| [3](docs/phase3_decision.md) | And over a whole month held at once? | **No.** The range came out too wide: the move landed inside it 86.5% of the time where 80% was wanted. |
+| [4](docs/phase4_decision.md) | Does correcting the width by however much recent forecasts were off fix that? | **Yes**, and by four of the 200 test dates, which is as thin as a pass gets. |
+| [5a](docs/phase5a_decision.md) | Does round 2 hold on the S&P 500? | **No.** The average is right and the misses bunch together at a week, which no model in the set removes. |
+| [5b](docs/phase5b_decision.md) | Does round 4 hold on the S&P 500? | **Yes**, and the fault it was built to fix turned up there on its own, at the same horizon. |
+
+Round 5 is the one worth reading. It says the day-ahead winner picked in round 2 was a
+coin toss between two close candidates, and it says the month-ahead problem found in
+round 3 is a real property of stock indices rather than a quirk of one market.
+
+There is also a control for the range work, the same idea as the electricity series: a
+made-up price series whose volatility we chose ourselves, so the right answer is known
+before the run. The model that generated it must pass, and a model missing the
+volatility part must be caught. Both hold, and the control also shows which of the
+checks is doing the catching: the one that looks at whether misses bunch together. The
+others barely notice.
 
 ## Try it in five minutes
 
@@ -143,7 +175,7 @@ Q = n(n+2)\sum_{k=1}^{L}\frac{\hat\rho_k^2}{n-k} \sim \chi^2_L,
 ```
 
 For the Nifty, ARCH-LM rejects at every one of the 250 test origins: the returns have no
-forecastable mean, but their variance clusters, which is what Phase 2 models.
+forecastable mean, but their variance clusters, which is what the later rounds model.
 
 **The decision rule.** Committed before the test origins were scored: a model wins only
 if its relative MAE is below 1 and its Holm-adjusted one-sided DM p-value is below 0.05
