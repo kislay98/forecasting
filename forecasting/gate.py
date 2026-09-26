@@ -56,7 +56,10 @@ REQUIRED_THRESHOLDS_P2 = {
     "per_test_alpha",
     "crps_ratio_below",
 }
-PHASES = (1, 2, 3)
+# Phase 4 adds the one parameter the conformal layer has: how many recent eligible
+# origins calibrate the width correction.
+REQUIRED_THRESHOLDS_P4 = REQUIRED_THRESHOLDS_P2 | {"conformal_window"}
+PHASES = (1, 2, 3, 4)
 
 
 @dataclass(frozen=True)
@@ -110,9 +113,22 @@ def load_gate(path: str | Path) -> Gate:
     if raw["primary_window"] not in ("expanding", "rolling"):
         raise _bad("primary_window", "must be expanding or rolling")
     th = raw["thresholds"]
-    required_th = REQUIRED_THRESHOLDS_P2 if phase >= 2 else REQUIRED_THRESHOLDS
+    if phase >= 4:
+        required_th = REQUIRED_THRESHOLDS_P4
+    elif phase >= 2:
+        required_th = REQUIRED_THRESHOLDS_P2
+    else:
+        required_th = REQUIRED_THRESHOLDS
     if not isinstance(th, dict) or set(th) != required_th:
         raise _bad("thresholds", f"keys must be exactly {sorted(required_th)}")
+    if phase >= 4:
+        k = th["conformal_window"]
+        if not isinstance(k, int) or isinstance(k, bool) or k < 20:
+            raise _bad(
+                "thresholds.conformal_window",
+                "must be an integer of at least 20; below that the empirical quantile "
+                "of the conformity scores is a couple of points",
+            )
     if phase >= 2:
         pta = th["per_test_alpha"]
         if not isinstance(pta, int | float) or not 0 < pta <= alpha:

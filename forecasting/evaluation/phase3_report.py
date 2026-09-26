@@ -19,6 +19,7 @@ import pandas as pd
 
 from forecasting.backtest.store import ForecastStore, level_tag
 from forecasting.config import RunConfig
+from forecasting.evaluation.conformal import conformalise
 from forecasting.evaluation.phase2 import calibration_table, gate_decision
 from forecasting.evaluation.risk import risk_table, simple_loss
 from forecasting.gate import Gate
@@ -113,6 +114,24 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
         "zero and everything below is about the spread."
     )
     a("")
+
+    if gate is not None and gate.phase >= 4:
+        k = int(gate.thresholds["conformal_window"])
+        # Correct test rows only. Their calibration set is past origins, dev and test
+        # alike, restricted to those whose h-step outcome had already landed.
+        frame = conformalise(frame, cfg.levels, k, window, roles=("test",))
+        before = int((frame["origin_role"] == "test").sum())
+        frame = frame[(frame["origin_role"] != "test") | (frame["conformal_n"] > 0)]
+        after = int((frame["origin_role"] == "test").sum())
+        a(f"## Conformal calibration (P4), window {k}")
+        a("")
+        a(
+            f"Interval widths are corrected from the most recent {k} eligible past "
+            f"origins. {before - after} of {before} test rows are dropped because fewer "
+            f"than 20 eligible origins existed yet; they are excluded rather than scored "
+            f"uncorrected."
+        )
+        a("")
 
     cal = calibration_table(frame, scfg, cfg.levels, window, role="test")
     if gate is not None:

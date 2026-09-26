@@ -1,0 +1,34 @@
+# Phase 4 (conformal calibration). The design is identical to Phase 3's on purpose:
+# same series, same start, same horizons, same origins, same models, same seed, same
+# path count. The forecasts are therefore the same forecasts, and the store should
+# reproduce Phase 3's content hash exactly.
+#
+# What P4 changes is not the model. It is a post-processing layer applied to the
+# intervals afterwards (forecasting/evaluation/conformal.py), whose only parameter is
+# registered in configs/phase4/gate.yaml. Holding the design fixed is what makes the
+# comparison mean anything: any difference between the P3 and P4 decisions is the
+# conformal correction and nothing else.
+seed: 20260926
+n_jobs: 4                             # parallel folds; not part of the run_id
+n_paths: 10000                        # simulated paths per fold; IS part of the run_id
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]
+series:
+  - id: nifty50
+    source: csv:../../data/nifty50.csv  # NSE price index, weekend sessions dropped (M8-5)
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01                   # as registered for Phase 1 (M8-6)
+    freq: trading_days
+    season: none
+    target: cumulative_returns          # log(p_t+h / p_t), as registered for Phase 3
+    H: 20
+    decision_horizons: [1, 5, 20]
+    origin_step: 20                     # non-overlapping, so independence is testable at h = 20
+    n_dev_origins: 100
+    n_test_origins: 200
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch

@@ -1,0 +1,70 @@
+# Pre-registration for the Phase 4 gate (P4), committed before the first
+# `forecast run configs/phase4/phase4.yaml` that scores test origins.
+#
+# P3 returned NO-GO on exactly one check: the 80% interval covered 0.865 at h = 20
+# against a registered band of [0.75, 0.85]. The model had the shape of the
+# distribution roughly right and its width wrong, by a fairly steady amount. That is
+# the failure split conformal calibration exists to fix, and it was in the spec's
+# Phase 2 scope from the start. It was skipped then; this registers it properly.
+#
+# What changes from P3: nothing about the model, the design, the origins or the seed.
+# The forecasts are the same forecasts. A conformal width correction is applied to the
+# intervals afterwards, calibrated on the most recent eligible past origins. Any
+# difference between the P3 and P4 decisions is therefore the correction and nothing
+# else, which is the only reason to hold everything else fixed.
+#
+# The decision is the P3 decision, unchanged, applied to the conformalised intervals:
+# all four conditions at h = 1, 5 and 20, coverage bands, Kupiec and Christoffersen at
+# the Sidak per-test level for twelve tests, and CRPS against the flat comparator.
+# Rows the layer could not calibrate (fewer than 20 eligible past origins) are excluded
+# from scoring rather than counted as corrected.
+#
+# conformal_window is 60, chosen on a stated rule rather than by tuning: at the 95%
+# level an empirical quantile needs at least 1 / 0.05 = 20 points to exist at all, 60
+# gives three times that, and at an origin step of 20 it spans about five years, long
+# enough to average within a regime and short enough to track a change between them.
+phase: 4
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  nifty50:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch
+    primary_model: gjr_garch
+    chosen_by: >
+      Carried over from P3 unchanged, deliberately. The model is not being reselected:
+      P4 asks one question, whether a conformal correction repairs the width failure
+      that P3 found, and changing the model at the same time would make the answer
+      unreadable.
+    expectation: >
+      The honest position before the run: dev cannot validate this, and that is the
+      main thing to say about it.
+
+      The over-coverage P4 is meant to fix does not appear in the dev window at all.
+      On dev, gjr_garch covers 0.78 at h = 20 against a nominal 0.80, which is already
+      right, and applying the conformal layer there moves it to roughly 0.85, which is
+      worse. The failure is a test-period phenomenon caused by a model selected in a
+      volatile regime meeting a calm one, and dev is the volatile regime.
+
+      So conformal_window was set by an a priori rule rather than fitted, because there
+      was nothing honest to fit it on. The registered prediction is that the correction
+      brings h = 20 coverage down inside the band and that P4 returns GO. The registered
+      risk is the opposite of a fix: the layer adds noise at the horizons that were
+      already passing, pushing h = 1 or h = 5 outside their bands and turning a
+      one-check failure into a different one.
+
+      If that happens, the conclusion is not that conformal prediction does not work.
+      It is that a correction which cannot be validated on the data available should not
+      be applied, and P3's honest NO-GO stands as the answer.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P3
+  crps_ratio_below: 1.0           # against zero_return_fhs on the same origins
+  conformal_window: 60
