@@ -1,0 +1,33 @@
+# Phase 5b: replication of the Phase 4 decision on a second market.
+#
+# Same rule as phase5a: nothing here was chosen by looking at S&P 500 data. Every number
+# is copied from configs/phase4/phase4.yaml, which itself copied Phase 3's. Only the
+# series changes.
+#
+# Read this file together with configs/phase5b/gate.yaml, which carries the conformal
+# window, and with docs/phase4_decision.md, which is the result being replicated: a GO
+# with a margin of four origins out of 200.
+seed: 20260926                          # Phase 4's seed, unchanged
+n_jobs: 4
+n_paths: 10000
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]
+series:
+  - id: sp500
+    source: csv:../../data/sp500.csv
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01
+    freq: trading_days
+    season: none
+    target: cumulative_returns
+    H: 20
+    decision_horizons: [1, 5, 20]
+    origin_step: 20
+    n_dev_origins: 100
+    n_test_origins: 200
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch

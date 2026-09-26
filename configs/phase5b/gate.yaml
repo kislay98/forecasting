@@ -1,0 +1,72 @@
+# Pre-registration for the Phase 5b gate (P5b): the Phase 4 decision, on a second market.
+#
+# Written and committed before the S&P 500 data file existed in this repo. Every threshold
+# and every design choice is copied from configs/phase4/gate.yaml. The primary model and
+# the conformal window are carried over by name, not re-chosen.
+#
+# What the replication asks. P4 returned GO on gjr_garch with a split conformal width
+# correction: 80% coverage at h = 20 fell from 0.865 to 0.830 against a band of
+# [0.75, 0.85]. The margin was four origins out of 200. The question is whether that
+# survives a second market.
+#
+# What counts as a replication: all four registered conditions pass at h = 1, 5 and 20 on
+# the conformalised intervals, exactly as for Nifty. Rows the conformal layer cannot
+# calibrate are excluded from scoring, not scored uncorrected.
+#
+# Committed in advance: if this fails, the reading is that P4's GO was a Nifty-specific
+# near miss rather than a repeatable property of the method. The window does not move to
+# make it pass, and P4's decision is not revisited either way. Given the size of P4's
+# margin, a failure here would not be surprising, and saying that now is the point of
+# saying it now.
+phase: 4
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  sp500:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch
+    primary_model: gjr_garch
+    chosen_by: >
+      Carried over by name from configs/phase4/gate.yaml, which carried it from Phase 3.
+      A replication that reselects the model is not a replication.
+    expectation: >
+      The registered prediction: this fails, or passes with a margin too thin to mean
+      anything. P4 passed by four origins out of 200 at the check that mattered, which is
+      about one standard error of a coverage estimate at that sample size, so a second
+      independent market has roughly even odds of landing on the other side of the band
+      even if the method is sound. That is a statement about the power of the design, not
+      about conformal prediction.
+
+      Two specific things to watch, both registered before the run:
+
+      First, direction. On Nifty the uncorrected model over-covered at h = 20 (0.865) and
+      the correction shrank the interval. If the S&P model under-covers instead, the
+      correction will widen it, and a GO here would be the layer fixing the opposite
+      error. That would be stronger evidence for the method than a second shrink, because
+      it is the case the Nifty run never tested.
+
+      Second, the calm-regime story. P4's over-coverage came from a model selected in a
+      volatile dev window meeting a calmer test window. The S&P dev window under this
+      design (1996 onwards, 100 dev origins at step 20) contains 2000 to 2002, and the
+      test window contains 2008 and 2020. That is the opposite ordering, volatile test
+      after a volatile dev, so the Nifty mechanism does not transfer and the failure
+      mode, if there is one, should be different.
+
+      A12 applies here with more force than in 5a: in this shape (cumulative object,
+      origin step 20) the coverage bands and Kupiec were measured to have no power
+      against a model with no conditional variance at all, and Christoffersen caught it
+      in only two of three synthetic seeds. A GO on the calibration checks alone is
+      therefore weak evidence. The CRPS ratio against the flat comparator is the number
+      that says whether conditioning is paying on this market.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise, as registered for P3
+  crps_ratio_below: 1.0           # against zero_return_fhs on the same origins
+  conformal_window: 60            # carried over from P4, not re-chosen

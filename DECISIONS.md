@@ -30,6 +30,7 @@ before any milestone.
 | Phase 3 lite | Cumulative loss, path simulation, VaR and expected shortfall. P3 registered, decision: NO-GO on gjr_garch (over-covers at h = 20), [docs/phase3_decision.md](docs/phase3_decision.md) | Done (26 Sep 2026) |
 | Phase 4 | Split conformal calibration on the same cumulative object. P4 registered, decision: GO on gjr_garch with the correction applied, by four origins, [docs/phase4_decision.md](docs/phase4_decision.md) | Done (26 Sep 2026) |
 | Control (A12) | Positive control for the calibration harness: a GARCH(1,1) DGP, correct model must pass, flat model must be caught. `tests/test_control.py` | Done (26 Sep 2026) |
+| Phase 5 | Replication on a second market (S&P 500). P5a (Phase 2 shape) and P5b (Phase 4 shape) registered before the data existed | Registered 26 Sep 2026, awaiting data |
 
 ## Scope update (22 Sep 2026)
 
@@ -286,6 +287,22 @@ conditional variance ourselves.
 | A12-6 | CRPS is excluded when judging whether the flat model was caught, and the exclusion is stated in the test | The registered CRPS check compares a model against `zero_return_fhs`, so for `zero_return_fhs` it is a comparison with itself, exactly 1.0 and always a failure. Counting it would make the negative arm pass for free. It also means the registered condition can say nothing about the comparator itself, which is worth remembering the next time the comparator is the model on trial |
 | A12-7 | The negative arm asserts less than was measured (at least 2 of 3 in shape A, at least 1 of 3 in shape B, against 3 of 3 and 2 of 3 measured), and the measured counts sit in the test docstring | A control whose threshold is set at exactly the observed count fails on the next library upgrade and gets deleted. Under-asserting keeps it honest and keeps it alive; the numbers are in the docstring for anyone reading the margin |
 | A12-8 | The control runs in ordinary CI (`slow`, about 90 seconds), not nightly | A control that only runs when someone remembers to run it is not a control. The canary tier stays nightly because it takes hours |
+
+## Phase 5 replication decisions (registered 26 Sep 2026, before the data)
+
+The spec's Phase 1 exit table says to investigate covariates or a panel before any
+further modelling work. This is the panel direction, and it is the cheaper half: the same
+registered designs on a second market, with nothing re-chosen.
+
+| # | Decision | Why |
+|---|---|---|
+| P5-1 | Both gates were written and committed before `data/sp500.csv` existed in the repo. Not before the data was seen, before it was fetched | The registration cannot have been informed by the data it will be applied to, which is the strongest form this gets. It also costs nothing here, because a replication has nothing left to choose |
+| P5-2 | Everything is copied: start date 1996-01-01, origin step, origin counts, levels, seeds, model lists, thresholds, corrected alphas, primary models (`ewma` for 5a, `gjr_garch` plus `conformal_window` 60 for 5b). Only the series changes | Re-selecting the primary model on S&P dev origins would answer a much weaker question, whether some model in the family fits this market, which is nearly always yes. Copying it asks whether the specific bet Phase 2 and Phase 4 placed was a fact about equity index volatility or a fact about the Nifty 50 |
+| P5-3 | The S&P 500 has decades more history and it is not used. The start date stays 1996-01-01 so the test period covers about the same calendar span as Nifty's | A longer expanding training window would change the thing being compared. NYSE trades about 252 days a year against NSE's 246, so the spans are comparable rather than identical, and the report has to say so |
+| P5-4 | Registered in advance: a failure is not followed by re-tuning. Thresholds do not move, the conformal window does not move, the primary model is not reselected, and the Nifty decisions are not revisited either way | Stated before the run so it cannot be argued afterwards. A second market that says no is a result |
+| P5-5 | P5b's registered prediction is that it fails, or passes with a margin too thin to mean anything. P4 passed by four origins out of 200, roughly one standard error of a coverage estimate at that sample size, so an independent market has close to even odds of landing the other side of the band even if the method is sound | Predicting the likely failure of your own previous result, in writing, before the run, is the only version of this that is worth anything. The registered prediction also names what would be stronger evidence than a pass: if the S&P model under-covers, the correction widens rather than shrinks, which is the case the Nifty run never tested |
+| P5-6 | Both gates record that A12 limits how much a clean pass can mean, 5b especially: in that shape the coverage bands and Kupiec have no measured power against a model with no conditional variance at all. Both say to read the CRPS ratio even when every check passes | The control was built two hours earlier in the same session and its finding changes how these tables should be read. Writing that into the registration is cheaper than remembering it later |
+| P5-7 | `scripts/fetch_sp500.py` tries stooq then Yahoo, writes `data/sp500_raw.csv` and `data/sp500.csv` in the same shape as the Nifty pair, and has to run outside the sandbox. Both sources refuse data centre addresses, as niftyindices.com did | The same constraint as M8-5 and the same answer: the fetch script is committed, the data file is committed, and CI never fetches |
 
 ## Notes for Phase 2
 

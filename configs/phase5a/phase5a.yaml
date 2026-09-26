@@ -1,0 +1,36 @@
+# Phase 5a: replication of the Phase 2 decision on a second market.
+#
+# Nothing here was chosen by looking at S&P 500 data. Every number is copied from
+# configs/phase2/phase2.yaml: the same start date, the same origin step, the same origin
+# counts, the same model list, the same levels. Only the series changes. That is what
+# makes this a replication rather than a second study, and it is why this file and its
+# gate were written and committed before the data file existed.
+#
+# The start date stays 1996-01-01 even though the S&P 500 has decades more history, so
+# that the test period covers roughly the same calendar span as Nifty's. NYSE trades
+# about 252 days a year against NSE's 246, so 400 origins at step 5 reaches a little
+# further back here; the span is comparable, not identical, and the report says so.
+seed: 20260925                          # Phase 2's seed, unchanged
+n_jobs: 4                               # parallel folds; not part of the run_id
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]
+series:
+  - id: sp500
+    source: csv:../../data/sp500.csv    # scripts/fetch_sp500.py, weekend sessions dropped
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01
+    freq: trading_days
+    season: none
+    target: returns
+    H: 20
+    decision_horizons: [1, 5]
+    origin_step: 5
+    n_dev_origins: 200
+    n_test_origins: 400
+    models:
+      - zero_return
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch

@@ -1,0 +1,68 @@
+# Pre-registration for the Phase 5a gate (P5a): the Phase 2 decision, on a second market.
+#
+# Written and committed before the S&P 500 data file existed in this repo, which is the
+# strongest form this registration can take. Nothing in it could have been informed by
+# the data it will be applied to, and the dev origins are not being used to select
+# anything: ewma is carried over from Phase 2 by name.
+#
+# What the replication asks. Phase 2 returned GO on ewma for Nifty: the 80% interval
+# covered 0.787 at h = 1 and 0.815 at h = 5, the 95% covered 0.940 and 0.938, and CRPS
+# was 0.87 of Phase 1's flat comparator. The question here is whether that is a fact
+# about equity index volatility or a fact about the Nifty 50 since 1996. Same thresholds,
+# same corrected alpha, same primary model, different market.
+#
+# What counts as a replication: all four registered conditions pass at h = 1 and h = 5,
+# exactly as they were required to for Nifty. A pass on three of four is a failure.
+#
+# Committed in advance, so it cannot be argued afterwards: if this fails, the reading is
+# that Phase 2's GO does not generalise beyond the market it was measured on. It is not
+# an invitation to re-select the primary model on S&P dev origins, and the thresholds do
+# not move. A second market that says no is a result, and Phase 2's Nifty decision stands
+# as what it always was, a decision about Nifty.
+phase: 2
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  sp500:
+    decision_horizons: [1, 5]
+    models:
+      - zero_return
+      - zero_return_fhs
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch
+    primary_model: ewma
+    chosen_by: >
+      Not chosen here at all. Carried over by name from configs/phase2/gate.yaml, where
+      it was picked on Nifty dev origins by lowest CRPS at h = 1 with coverage as the
+      stronger evidence. Re-selecting on S&P dev origins would answer a different and
+      much weaker question, namely whether some model in the family fits this market,
+      which is nearly always yes.
+    expectation: >
+      The registered prediction: ewma passes. The mechanism Phase 2 verified is generic,
+      not Indian. Its half-width tracked the current volatility level (0.0116 calm,
+      0.0418 in the 2020 crash, 0.0093 after) where a flat interval moved 1%, and
+      volatility clustering is as strong in the S&P 500 as in the Nifty 50.
+
+      The registered risk, stated before any S&P origin is scored: the S&P 500 has a
+      stronger leverage effect than the Nifty, which is the one thing ewma cannot
+      represent, since its recursion treats a large fall and a large rise identically. If
+      ewma fails here, the most likely failure is under-coverage at the 95% level
+      concentrated in falling markets, 2008 above all, and the models with an asymmetric
+      term should visibly beat it on CRPS in the same run. That combination would be
+      evidence that the Phase 2 selection was market-specific, and that the dev rule
+      which picked ewma over gjr_garch on a 0.4% CRPS margin was picking noise.
+
+      A second possibility worth naming in advance because it would look like success:
+      every model passes, including the flat comparator. A12 measured that the
+      calibration checks have limited power against a model with no conditional variance
+      at all, so a table where nothing fails says less than it appears to. The CRPS
+      ratio is the column that carries information about conditioning, and it should be
+      read even when every gate check passes.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0064          # Sidak, 8 tests, 5% family-wise, as registered for P2
+  crps_ratio_below: 1.0           # against zero_return on the same origins
