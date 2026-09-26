@@ -238,11 +238,18 @@ def gate_state(manifest: dict[str, Any]) -> tuple[Gate | None, str]:
     if now != g.get("sha256"):
         return None, "gate.yaml changed after this run (P1): no gate decision; rerun"
     try:
-        return load_gate(
-            g["path"]
-        ), f"gate.yaml {g['sha256'][:12]}, commit {g.get('commit', '')[:12]}"
+        gate = load_gate(g["path"])
     except Exception as e:
         return None, f"gate.yaml does not load: {e}"
+    if gate.phase != 1:
+        # A phase 2 registration answers a calibration question with its own thresholds
+        # (evaluation/phase2.py). This report issues the Phase 1 exit decision only, so
+        # it declines rather than reading keys a phase 2 gate does not have.
+        return None, (
+            f"gate.yaml is a phase {gate.phase} registration: this report does not issue "
+            f"its decision, see the phase {gate.phase} report"
+        )
+    return gate, f"gate.yaml {g['sha256'][:12]}, commit {g.get('commit', '')[:12]}"
 
 
 def exit_decision(
