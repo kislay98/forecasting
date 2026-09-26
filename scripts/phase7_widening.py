@@ -184,7 +184,10 @@ def store(run_dir: Path) -> str:
     from forecasting.gate import load_gate
 
     manifest = json.loads((run_dir / "manifest.json").read_text())
-    cfg = load_config(Path(manifest["config"]))
+    # runs live at <config dir>/runs/<run_id>; the config is the one yaml there that is
+    # not the gate
+    cfg_path = next(p for p in sorted(run_dir.parents[1].glob("*.yaml")) if p.name != "gate.yaml")
+    cfg = load_config(cfg_path)
     scfg = cfg.series[0]
     gate = load_gate(cfg.base_dir / "gate.yaml")
     window = gate.primary_window

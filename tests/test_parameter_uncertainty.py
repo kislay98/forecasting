@@ -289,7 +289,7 @@ def test_parameter_uncertainty_is_opt_in():
     for path in sorted((ROOT / "configs").glob("phase*/phase*.yaml")):
         cfg = load_config(path)
         for s in cfg.series:
-            if s.target == "cumulative_returns" and path.parent.name != "phase7":
+            if s.target == "cumulative_returns" and not path.parent.name.startswith("phase7"):
                 assert not {"garch_pu", "gjr_garch_pu"} & set(s.models), path
     for path in sorted((ROOT / "configs").glob("**/*.yaml")):
         text = path.read_text()
