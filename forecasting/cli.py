@@ -164,8 +164,12 @@ def cmd_report(target: Path, out=None) -> int:
     return _report(run_dir, out)
 
 
-def cmd_risk(target: Path, out=None) -> int:
-    """Phase 3: write the holding-period risk report for a run."""
+def cmd_risk(target: Path, out=None, thresholds=None) -> int:
+    """Phase 3: write the holding-period risk report for a run.
+
+    `thresholds` are loss thresholds for the threshold-probability table, as fractions
+    of the position (0.05 is a 5% loss, -0.05 a 5% gain). None means the report's
+    default, `phase3_report.DEFAULT_THRESHOLDS`."""
     import json
 
     from forecasting.evaluation import phase3_report
@@ -202,7 +206,9 @@ def cmd_risk(target: Path, out=None) -> int:
                 )
         except Exception as e:
             why = f"{why}; and it does not load now: {e}"
-    path = phase3_report.write(run_dir, cfg, gate, why)
+    if thresholds is None:
+        thresholds = phase3_report.DEFAULT_THRESHOLDS
+    path = phase3_report.write(run_dir, cfg, gate, why, thresholds=thresholds)
     print(f"risk report: {path}", file=out)
     return 0
 
@@ -217,6 +223,13 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--force", action="store_true", help="redo a run whose directory exists")
     k = sub.add_parser("risk", help="Phase 3: holding-period VaR and expected shortfall")
     k.add_argument("target", type=Path, help="a config path or a run directory")
+    k.add_argument(
+        "--thresholds",
+        type=float,
+        nargs="+",
+        default=None,
+        help="loss thresholds as fractions, e.g. -0.05 0.02 0.05 0.10 (negative is a gain)",
+    )
     p = sub.add_parser("report", help="rebuild a run's report from its store (no refits)")
     p.add_argument("target", type=Path, help="a run directory, or the config of the run")
     args = parser.parse_args(argv)
@@ -227,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "report":
         return cmd_report(args.target)
     if args.command == "risk":
-        return cmd_risk(args.target)
+        return cmd_risk(args.target, thresholds=args.thresholds)
     return 2  # pragma: no cover
 
 
