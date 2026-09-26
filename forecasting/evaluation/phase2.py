@@ -49,9 +49,17 @@ def quantile_grid(g: pd.DataFrame, levels: tuple[float, ...]) -> tuple[np.ndarra
 
 
 def calibration_table(
-    frame: pd.DataFrame, scfg: SeriesConfig, window: str, role: str = "test"
+    frame: pd.DataFrame,
+    scfg: SeriesConfig,
+    levels: tuple[float, ...],
+    window: str,
+    role: str = "test",
 ) -> pd.DataFrame:
-    """One row per (model, h): coverage, Kupiec, Christoffersen, PIT, CRPS."""
+    """One row per (model, h): coverage, Kupiec, Christoffersen, PIT, CRPS.
+
+    `levels` is the run config's interval levels, which is where the quantile grid
+    comes from; it is a run-level setting, not a per-series one.
+    """
     rows_in = frame[
         (frame["origin_role"] == role)
         & (frame["status"] == "ok")
@@ -89,7 +97,7 @@ def calibration_table(
                 rec[f"ind_p_{tag}"] = np.nan
                 rec[f"cc_p_{tag}"] = np.nan
                 rec[f"clustered_{tag}"] = None
-        q, taus = quantile_grid(g, scfg.levels)
+        q, taus = quantile_grid(g, levels)
         rec["pit_p"] = pit_uniformity(y, q, taus)[1]
         rec["crps"] = crps_grid(y, q, taus)
         out.append(rec)

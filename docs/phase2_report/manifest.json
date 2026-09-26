@@ -1,0 +1,169 @@
+{
+  "config": {
+    "levels": [
+      0.5,
+      0.8,
+      0.9,
+      0.95,
+      0.99
+    ],
+    "seed": 20260925,
+    "series": [
+      {
+        "H": 20,
+        "columns": {
+          "date": "Date",
+          "id": null,
+          "value": "Close"
+        },
+        "date_format": "%d %b %Y",
+        "decision_horizons": [
+          1,
+          5
+        ],
+        "duplicates": "error",
+        "freq": "trading_days",
+        "id": "nifty50",
+        "initial_window": 500,
+        "m": 1,
+        "models": [
+          "zero_return",
+          "zero_return_fhs",
+          "ewma",
+          "garch_normal",
+          "garch",
+          "gjr_garch"
+        ],
+        "n_dev_origins": 200,
+        "n_test_origins": 400,
+        "origin_step": 5,
+        "positive": false,
+        "rolling_length": 500,
+        "sarima_search": "stepwise",
+        "sma_windows": [
+          5,
+          20,
+          60,
+          250
+        ],
+        "source": "csv:../../data/nifty50.csv",
+        "start": "1996-01-01",
+        "target": "returns",
+        "transform": "none",
+        "warmup_models": "baselines",
+        "window": "both"
+      }
+    ]
+  },
+  "content_hash": "ccc0963d919bda1b20627e0b90b2759db9cc8b916a67bb525491313e1697548c",
+  "created_utc": "2026-09-26T08:05:43+00:00",
+  "data_hashes": {
+    "nifty50": "e4af01c57f472c30da5ef3387e0ea4fd9c04392579492b697f88530b1d9a1cdd"
+  },
+  "gate": {
+    "alpha": 0.05,
+    "commit": "82f388a51dde2f41d093028bf11e814d69dcc278",
+    "committed": true,
+    "path": "/sessions/rcw-01poa2m8wyjxtmwpawx8m3rt/mnt/forecasting/configs/phase2/gate.yaml",
+    "present": true,
+    "primary_window": "expanding",
+    "registered": "2026-09-26",
+    "sha256": "323ddc09c0ad01ace18fdc3f7bb603efb9bb98108cf50ec258cd5911ed369c7d"
+  },
+  "git": "d62deac04562b1a029a42a86c0e8b8952ad148d1-dirty-ac702ce0",
+  "plans": {
+    "nifty50": {
+      "initial_window": 500,
+      "mode": "full",
+      "n_dev": 200,
+      "n_origins": 1417,
+      "n_test": 400,
+      "n_warmup": 817,
+      "origin_step": 5,
+      "reduced": false,
+      "windows": [
+        "expanding",
+        "rolling"
+      ]
+    }
+  },
+  "rows": {
+    "failed": 40,
+    "ok": 242000,
+    "total": 242040
+  },
+  "run_id": "9260b33a46f88d81",
+  "selections": {
+    "best_baseline": {
+      "nifty50": {
+        "expanding": {
+          "dev_mase": 0.40801957219718565,
+          "model": "zero_return",
+          "scores": {
+            "zero_return": 0.40801957219718565
+          }
+        },
+        "rolling": {
+          "dev_mase": 0.6527104976627405,
+          "model": "zero_return",
+          "scores": {
+            "zero_return": 0.6527104976627405
+          }
+        }
+      }
+    },
+    "best_candidate": {
+      "nifty50": {
+        "expanding": {
+          "dev_mase": 0.40801957219718565,
+          "model": "ewma",
+          "ranking": [
+            "ewma",
+            "garch",
+            "garch_normal",
+            "gjr_garch",
+            "zero_return_fhs"
+          ],
+          "scores": {
+            "ewma": 0.40801957219718565,
+            "garch": 0.40801957219718565,
+            "garch_normal": 0.40801957219718565,
+            "gjr_garch": 0.40801957219718565,
+            "zero_return_fhs": 0.40801957219718565
+          },
+          "with_intervals": "ewma"
+        },
+        "rolling": {
+          "dev_mase": 0.6527104976627405,
+          "model": "ewma",
+          "ranking": [
+            "ewma",
+            "garch",
+            "garch_normal",
+            "gjr_garch",
+            "zero_return_fhs"
+          ],
+          "scores": {
+            "ewma": 0.6527104976627405,
+            "garch": 0.6527104976627405,
+            "garch_normal": 0.6527104976627405,
+            "gjr_garch": 0.6527104976627405,
+            "zero_return_fhs": 0.6527104976627405
+          },
+          "with_intervals": "ewma"
+        }
+      }
+    },
+    "sma": {}
+  },
+  "versions": {
+    "forecasting": "0.1.0",
+    "joblib": "1.6.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.11.16",
+    "scipy": "1.17.1"
+  },
+  "warnings": []
+}
