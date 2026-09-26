@@ -6,6 +6,10 @@ __pycache__/
 runs/
 **/data/fred/
 !configs/data/fred/
+# Drafts and scratch written into the repo folder by a chat session. They are kept on
+# disk on purpose and are not part of the study's record.
+Claude outputs/
+
 *.egg-info/
 dist/
 build/
