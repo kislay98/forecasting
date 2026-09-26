@@ -144,3 +144,27 @@ def test_gate_primary_window_and_thresholds_are_used(tmp_path):
     assert rep.series[0].gate.answer != "AUDIT FIRST"
     man_json = json.dumps(man)  # the manifest is JSON-serialisable with the gate block
     assert "sha256" in man_json
+
+
+def test_crps_reference_is_optional_and_validated(cfg_dir):
+    """Phase 2 registered zero_return as the CRPS comparator and Phases 3 and 4 registered
+    zero_return_fhs, which the report had hardcoded. The key makes it explicit without
+    invalidating the four gates already committed, so it is optional, not required."""
+    path = write_gate(cfg_dir / "config.yaml")
+    g = yaml.safe_load(path.read_text())
+    assert "crps_reference" not in g["thresholds"]
+
+    g["thresholds"]["crps_reference"] = "zero_return"
+    path.write_text(yaml.safe_dump(g))
+    assert load_gate(path).thresholds["crps_reference"] == "zero_return"
+
+    g["thresholds"]["crps_reference"] = ""
+    path.write_text(yaml.safe_dump(g))
+    with pytest.raises(ConfigError, match="crps_reference"):
+        load_gate(path)
+
+    del g["thresholds"]["crps_reference"]
+    g["thresholds"]["not_a_threshold"] = 1
+    path.write_text(yaml.safe_dump(g))
+    with pytest.raises(ConfigError, match="thresholds"):
+        load_gate(path)

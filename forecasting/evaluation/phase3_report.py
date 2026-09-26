@@ -100,18 +100,23 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
 
     lines: list[str] = []
     a = lines.append
-    a(f"# Holding-period risk: {scfg.id}")
+    horizon = "Holding-period" if scfg.target == "cumulative_returns" else "Single-period"
+    a(f"# {horizon} risk: {scfg.id}")
     a("")
     a(
         f"Run `{manifest.get('run_id')}`, git `{str(manifest.get('git'))[:12]}`, "
         f"{window} window, {cfg.n_paths:,} simulated paths per origin."
     )
     a("")
+    quantity = (
+        "the cumulative move over h trading days, log(p_t+h / p_t)"
+        if scfg.target == "cumulative_returns"
+        else "the single-period return at t + h, log(p_t+h / p_t+h-1)"
+    )
     a(
-        "The quantity forecast is the cumulative move over h trading days, "
-        "log(p_t+h / p_t), converted to a loss as 1 - exp(r). Phase 1 established that "
-        "the mean of this series is not forecastable, so the point forecast is fixed at "
-        "zero and everything below is about the spread."
+        f"The quantity forecast is {quantity}, converted to a loss as 1 - exp(r). Phase 1 "
+        "established that the mean of this series is not forecastable, so the point "
+        "forecast is fixed at zero and everything below is about the spread."
     )
     a("")
 
@@ -150,7 +155,8 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
 
     cal = calibration_table(frame, scfg, cfg.levels, window, role="test")
     if gate is not None:
-        d = gate_decision(gate, scfg, cal, reference="zero_return_fhs")
+        reference = str(gate.thresholds.get("crps_reference", "zero_return_fhs"))
+        d = gate_decision(gate, scfg, cal, reference=reference)
         a(f"## Gate decision: {'GO' if d.go else 'NO-GO'}")
         a("")
         a(f"Primary model `{d.model}`, registered as {gate.registered} ({gate_why}).")

@@ -65,4 +65,12 @@ thresholds:
   coverage_80: [0.75, 0.85]
   coverage_95: [0.91, 0.98]
   per_test_alpha: 0.0064          # Sidak, 8 tests, 5% family-wise, as registered for P2
-  crps_ratio_below: 1.0           # against zero_return on the same origins
+  crps_ratio_below: 1.0
+  # Phase 1's zero_return: constant variance, Normal tails. This is the comparator
+  # Phase 2 registered, and naming it here is not a change to the registration; the
+  # line above said "against zero_return" from the start. It is named as a key because
+  # until now the code assumed zero_return_fhs, which is what Phase 3 and Phase 4
+  # registered, and a replication that quietly used a different comparator than the
+  # decision it replicates would not be a replication. Amended before any P5a test
+  # origin was scored, and recorded as P5-8.
+  crps_reference: zero_return

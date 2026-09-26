@@ -59,6 +59,12 @@ REQUIRED_THRESHOLDS_P2 = {
 # Phase 4 adds the one parameter the conformal layer has: how many recent eligible
 # origins calibrate the width correction.
 REQUIRED_THRESHOLDS_P4 = REQUIRED_THRESHOLDS_P2 | {"conformal_window"}
+# Optional, and optional on purpose. The model the CRPS ratio is measured against was
+# implicit until Phase 5: the code assumed zero_return_fhs, which is what Phase 3 and
+# Phase 4 registered, while Phase 2 registered Phase 1's zero_return. A replication of
+# Phase 2 has to name it, and making the key required would invalidate the gates already
+# committed for P1 through P4, whose hashes are recorded in their decisions.
+OPTIONAL_THRESHOLDS = {"crps_reference"}
 PHASES = (1, 2, 3, 4)
 
 
@@ -119,8 +125,15 @@ def load_gate(path: str | Path) -> Gate:
         required_th = REQUIRED_THRESHOLDS_P2
     else:
         required_th = REQUIRED_THRESHOLDS
-    if not isinstance(th, dict) or set(th) != required_th:
-        raise _bad("thresholds", f"keys must be exactly {sorted(required_th)}")
+    if not isinstance(th, dict) or not required_th <= set(th) <= required_th | OPTIONAL_THRESHOLDS:
+        raise _bad(
+            "thresholds",
+            f"keys must be {sorted(required_th)}, optionally with {sorted(OPTIONAL_THRESHOLDS)}",
+        )
+    if "crps_reference" in th and not (
+        isinstance(th["crps_reference"], str) and th["crps_reference"]
+    ):
+        raise _bad("thresholds.crps_reference", "must be the name of a model in the run")
     if phase >= 4:
         k = th["conformal_window"]
         if not isinstance(k, int) or isinstance(k, bool) or k < 20:
