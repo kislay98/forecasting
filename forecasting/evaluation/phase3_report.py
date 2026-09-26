@@ -120,17 +120,32 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
         # Correct test rows only. Their calibration set is past origins, dev and test
         # alike, restricted to those whose h-step outcome had already landed.
         frame = conformalise(frame, cfg.levels, k, window, roles=("test",))
-        before = int((frame["origin_role"] == "test").sum())
-        frame = frame[(frame["origin_role"] != "test") | (frame["conformal_n"] > 0)]
-        after = int((frame["origin_role"] == "test").sum())
+        scored = (frame["origin_role"] == "test") & (frame["window"] == window)
+        keep = (frame["origin_role"] != "test") | (frame["conformal_n"] > 0)
+        before, after = int(scored.sum()), int((scored & keep).sum())
+        frame = frame[keep]
         a(f"## Conformal calibration (P4), window {k}")
         a("")
         a(
             f"Interval widths are corrected from the most recent {k} eligible past "
-            f"origins. {before - after} of {before} test rows are dropped because fewer "
-            f"than 20 eligible origins existed yet; they are excluded rather than scored "
-            f"uncorrected."
+            f"origins, eligible meaning origins whose h-step outcome had already landed "
+            f"by the origin being corrected. The correction is applied to the {window} "
+            f"window only, which is the window the decision is read from. Rows from the "
+            f"other window are dropped below; they were never scored either way, so the "
+            f"row count falls by about half without any evidence being discarded."
         )
+        a("")
+        if before == after:
+            a(
+                f"All {after} scored test rows had the full calibration set available, "
+                f"so none were excluded."
+            )
+        else:
+            a(
+                f"{before - after} of {before} scored test rows are dropped because fewer "
+                f"than 20 eligible origins existed yet; they are excluded rather than "
+                f"scored uncorrected."
+            )
         a("")
 
     cal = calibration_table(frame, scfg, cfg.levels, window, role="test")
