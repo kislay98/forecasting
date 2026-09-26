@@ -16,7 +16,9 @@ Both are Date,Close with dates written as "03 Jul 1990", matching the Nifty file
 one adapter config reads either.
 
 Usage:
-    uv run python scripts/fetch_sp500.py [--source stooq|yahoo] [--out-dir data]
+    python3 scripts/fetch_sp500.py [--source stooq|yahoo] [--out-dir data]
+
+Standard library only, so it needs no virtualenv and no installed dependencies.
 
 Run it from an ordinary connection. Both sources refuse data centre addresses, so this
 will not work from a sandbox or a VPN, which is why the data file is committed to the
