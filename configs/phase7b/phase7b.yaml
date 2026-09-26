@@ -1,0 +1,31 @@
+# Phase 7b: the Phase 7 measurement on the S&P 500, in Phase 5b's design.
+#
+# Secondary to configs/phase7/phase7.yaml and registered with it. Phase 5b showed the
+# failure Phase 4 was built to fix recurring on the S&P 500 in the same place, so if
+# parameter uncertainty mattered for that failure it should show on both markets. The
+# design is 5b's unchanged (itself Phase 4's with the series swapped), so the point
+# models' rows here must equal a 5b run made on the same machine. The models are Phase 7's.
+seed: 20260926
+n_jobs: 4                             # parallel folds; not part of the run_id
+n_paths: 10000                        # as registered for P3 and P4; see the gate for cost
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]
+series:
+  - id: sp500
+    source: csv:../../data/sp500.csv
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01                   # as registered for Phase 5 (P5-3)
+    freq: trading_days
+    season: none
+    target: cumulative_returns          # the P3 and P4 object, log(p_t+h / p_t)
+    H: 20
+    decision_horizons: [1, 5, 20]
+    origin_step: 20
+    n_dev_origins: 100
+    n_test_origins: 200
+    models:
+      - zero_return_fhs
+      - garch
+      - garch_pu
+      - gjr_garch
+      - gjr_garch_pu
