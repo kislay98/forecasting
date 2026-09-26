@@ -16,6 +16,7 @@ from forecasting.models.baselines import (
     SeasonalNaive,
     ZeroReturn,
 )
+from forecasting.models.blocks import BLOCK_REGISTRY
 from forecasting.models.statistical import (
     SES,
     ARAuto,
@@ -49,6 +50,7 @@ REGISTRY: dict[str, ModelFactory] = {
     "garch_normal": lambda m: GARCHNormal(),
     "garch": lambda m: GARCH(),
     "gjr_garch": lambda m: GJRGARCH(),
+    **BLOCK_REGISTRY,  # Phase 6: the same models with block-bootstrap innovations
 }
 DERIVED = ("combination",)
 

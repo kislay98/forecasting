@@ -1,0 +1,91 @@
+nifty50, uncorrected, run 8302694e90783526, gate phase 3 sha256 c52cfd12304a
+  gjr_garch_block  (registered): NO-GO, 18 of 21
+      FAIL coverage h = 5 80%: 0.875 against [0.75, 0.85]
+      FAIL coverage h = 20 80%: 0.900 against [0.75, 0.85]
+      FAIL kupiec h = 20 80%: p = 0.0001 against alpha 0.0043
+  gjr_garch        (diagnostic): NO-GO, 20 of 21
+      FAIL coverage h = 20 80%: 0.865 against [0.75, 0.85]
+ h  cov80_iid  cov80_block  cov95_iid  cov95_block  ind80_iid  ind80_block  ind95_iid  ind95_block  crps_block_over_iid
+ 1     0.8250       0.8200     0.9500       0.9500     0.1811       0.1102     0.5092       0.5092               1.0006
+ 5     0.8400       0.8750     0.9800       0.9800     0.6590       0.9272     0.6854       0.6854               1.0129
+20     0.8650       0.9000     0.9750       0.9750     0.0776       0.3892     0.6117       0.6117               1.0100
+
+  coverage margins in origins (covered / n, room to the nearest band edge)
+    h =  1 80%: gjr_garch 165/200 room +5, gjr_garch_block 164/200 room +6
+    h =  1 95%: gjr_garch 190/200 room +6, gjr_garch_block 190/200 room +6
+    h =  5 80%: gjr_garch 168/200 room +2, gjr_garch_block 175/200 room -5
+    h =  5 95%: gjr_garch 196/200 room +0, gjr_garch_block 196/200 room +0
+    h = 20 80%: gjr_garch 173/200 room -3, gjr_garch_block 180/200 room -10
+    h = 20 95%: gjr_garch 195/200 room +1, gjr_garch_block 195/200 room +1
+
+  CRPS block / iid, paired over origins (95% bootstrap interval, share block lower)
+    h =  1: 1.0006 [0.9982, 1.0030], block lower at 0.450 of 200 origins
+    h =  5: 1.0129 [1.0019, 1.0249], block lower at 0.400 of 200 origins
+    h = 20: 1.0100 [1.0004, 1.0216], block lower at 0.435 of 200 origins
+
+nifty50, conformal 60, run c366b142179548fc, gate phase 4 sha256 7cd30c8a021e
+  gjr_garch_block  (registered): GO, 21 of 21
+  gjr_garch        (diagnostic): GO, 21 of 21
+ h  cov80_iid  cov80_block  cov95_iid  cov95_block  ind80_iid  ind80_block  ind95_iid  ind95_block  crps_block_over_iid
+ 1     0.8050       0.7900     0.9700       0.9700     0.1446       0.3724     0.5413       0.5413               1.0005
+ 5     0.8200       0.8100     0.9650       0.9700     0.4575       0.5571     0.4749       0.5413               1.0021
+20     0.8300       0.8300     0.9750       0.9700     0.7435       0.7435     0.6117       0.5413               0.9991
+
+  coverage margins in origins (covered / n, room to the nearest band edge)
+    h =  1 80%: gjr_garch 161/200 room +9, gjr_garch_block 158/200 room +8
+    h =  1 95%: gjr_garch 194/200 room +2, gjr_garch_block 194/200 room +2
+    h =  5 80%: gjr_garch 164/200 room +6, gjr_garch_block 162/200 room +8
+    h =  5 95%: gjr_garch 193/200 room +3, gjr_garch_block 194/200 room +2
+    h = 20 80%: gjr_garch 166/200 room +4, gjr_garch_block 166/200 room +4
+    h = 20 95%: gjr_garch 195/200 room +1, gjr_garch_block 194/200 room +2
+
+  CRPS block / iid, paired over origins (95% bootstrap interval, share block lower)
+    h =  1: 1.0005 [0.9975, 1.0034], block lower at 0.495 of 200 origins
+    h =  5: 1.0021 [0.9954, 1.0085], block lower at 0.550 of 200 origins
+    h = 20: 0.9991 [0.9946, 1.0037], block lower at 0.590 of 200 origins
+
+sp500, uncorrected, run d887e82f18d7501b, gate phase 3 sha256 4eb094fd614a
+  gjr_garch_block  (registered): NO-GO, 19 of 21
+      FAIL coverage h = 5 95%: 0.905 against [0.91, 0.98]
+      FAIL independence h = 5 95%: p = 0.0028 against alpha 0.0043
+  gjr_garch        (diagnostic): NO-GO, 20 of 21
+      FAIL coverage h = 20 95%: 0.985 against [0.91, 0.98]
+ h  cov80_iid  cov80_block  cov95_iid  cov95_block  ind80_iid  ind80_block  ind95_iid  ind95_block  crps_block_over_iid
+ 1     0.7950       0.8000     0.9550       0.9600     0.1358       0.2044     0.4036       0.3083               0.9976
+ 5     0.7850       0.7750     0.9350       0.9050     0.2283       0.2231     0.8018       0.0028               0.9993
+20     0.8100       0.7600     0.9850       0.9800     0.7353       0.3551     0.7619       0.0552               0.9933
+
+  coverage margins in origins (covered / n, room to the nearest band edge)
+    h =  1 80%: gjr_garch 159/200 room +9, gjr_garch_block 160/200 room +10
+    h =  1 95%: gjr_garch 191/200 room +5, gjr_garch_block 192/200 room +4
+    h =  5 80%: gjr_garch 157/200 room +7, gjr_garch_block 155/200 room +5
+    h =  5 95%: gjr_garch 187/200 room +5, gjr_garch_block 181/200 room -1
+    h = 20 80%: gjr_garch 162/200 room +8, gjr_garch_block 152/200 room +2
+    h = 20 95%: gjr_garch 197/200 room -1, gjr_garch_block 196/200 room +0
+
+  CRPS block / iid, paired over origins (95% bootstrap interval, share block lower)
+    h =  1: 0.9976 [0.9927, 1.0018], block lower at 0.530 of 200 origins
+    h =  5: 0.9993 [0.9960, 1.0024], block lower at 0.620 of 200 origins
+    h = 20: 0.9933 [0.9841, 1.0014], block lower at 0.620 of 200 origins
+
+sp500, conformal 60, run d887e82f18d7501b, gate phase 4 sha256 709e2ad5bb62
+  gjr_garch_block  (registered): GO, 21 of 21
+  gjr_garch        (diagnostic): GO, 21 of 21
+ h  cov80_iid  cov80_block  cov95_iid  cov95_block  ind80_iid  ind80_block  ind95_iid  ind95_block  crps_block_over_iid
+ 1     0.8300       0.8250     0.9750       0.9750     0.2892       0.1811     0.6117       0.6117               0.9992
+ 5     0.8000       0.8000     0.9650       0.9700     0.1724       0.1724     0.1865       0.5776               0.9990
+20     0.8150       0.8200     0.9600       0.9550     0.6052       0.8169     0.3083       0.0504               0.9959
+
+  coverage margins in origins (covered / n, room to the nearest band edge)
+    h =  1 80%: gjr_garch 166/200 room +4, gjr_garch_block 165/200 room +5
+    h =  1 95%: gjr_garch 195/200 room +1, gjr_garch_block 195/200 room +1
+    h =  5 80%: gjr_garch 160/200 room +10, gjr_garch_block 160/200 room +10
+    h =  5 95%: gjr_garch 193/200 room +3, gjr_garch_block 194/200 room +2
+    h = 20 80%: gjr_garch 163/200 room +7, gjr_garch_block 164/200 room +6
+    h = 20 95%: gjr_garch 192/200 room +4, gjr_garch_block 191/200 room +5
+
+  CRPS block / iid, paired over origins (95% bootstrap interval, share block lower)
+    h =  1: 0.9992 [0.9943, 1.0035], block lower at 0.465 of 200 origins
+    h =  5: 0.9990 [0.9961, 1.0022], block lower at 0.495 of 200 origins
+    h = 20: 0.9959 [0.9903, 1.0013], block lower at 0.585 of 200 origins
+

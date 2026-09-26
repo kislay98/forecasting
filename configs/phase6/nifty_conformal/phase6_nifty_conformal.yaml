@@ -1,0 +1,31 @@
+# Phase 6, Nifty 50, conformal arm: the same run as configs/phase6/phase6.yaml, decided
+# by P4's rules (split conformal, window 60) instead of P3's. Everything below is
+# identical to that file except the data path, which is one directory deeper, so the
+# forecasts are the same forecasts and only the gate differs. Read ./gate.yaml.
+seed: 20260926                        # Phase 4's seed, unchanged
+n_jobs: 4                             # parallel folds; not part of the run_id
+n_paths: 10000                        # simulated paths per fold; IS part of the run_id
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]
+series:
+  - id: nifty50
+    source: csv:../../../data/nifty50.csv  # NSE price index, weekend sessions dropped (M8-5)
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01                   # as registered for Phase 1 (M8-6)
+    freq: trading_days
+    season: none
+    target: cumulative_returns          # log(p_t+h / p_t), as registered for Phase 3
+    H: 20
+    decision_horizons: [1, 5, 20]
+    origin_step: 20                     # non-overlapping, so independence is testable at h = 20
+    n_dev_origins: 100
+    n_test_origins: 200
+    models:
+      - zero_return_fhs                 # the registered CRPS comparator, iid draws
+      - ewma
+      - garch_normal
+      - garch
+      - gjr_garch                       # the P3 and P4 primary, iid draws
+      - ewma_block
+      - garch_block
+      - gjr_garch_block                 # the P6 primary: gjr_garch with blocks of 10

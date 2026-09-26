@@ -1,0 +1,47 @@
+# scripts/block_vs_iid.py, dev origins, run before the gates were committed
+
+nifty50, dev origins 100 (2002-06-17 to 2010-06-14), block 10, 10,000 paths, h = 20
+                 sd_ratio_med  sd_ratio_mean  sd_ratio_min  sd_ratio_max  q80_ratio_mean  pred_linear_mean  kurt_iid_med  kurt_block_med  rho1_mean  rho1_sq_mean  share_wider
+model                                                                                                                                                                         
+zero_return_fhs        1.0441         1.0437        1.0149        1.0714          1.0335            1.0444        0.2318          0.3611     0.0690        0.2429       1.0000
+ewma                   1.1708         1.1714        1.1199        1.2298          1.1125            1.1441        1.7258          5.4232     0.1040        0.0770       1.0000
+garch                  1.1063         1.1063        1.0655        1.1591          1.1122            1.1317        2.5270          2.5638     0.1041        0.0208       1.0000
+gjr_garch              1.1053         1.1034        1.0514        1.1778          1.1240            1.1361        3.5314          2.5199     0.1050       -0.0000       1.0000
+
+Against the realised outcome at the same origins: coverage of the central 80% and 95% intervals, and sample CRPS of block over iid (below 1: block is better).
+          model  h  cov80_iid  cov80_block  cov95_iid  cov95_block  crps_ratio
+zero_return_fhs  1     0.8400       0.8400     0.9600       0.9600      1.0018
+zero_return_fhs  5     0.8400       0.8400     0.9700       0.9700      0.9989
+zero_return_fhs 20     0.7900       0.8000     0.9400       0.9500      0.9996
+           ewma  1     0.8100       0.8200     0.9500       0.9500      1.0025
+           ewma  5     0.7900       0.8100     0.9200       0.9500      1.0021
+           ewma 20     0.7200       0.7700     0.9100       0.9400      1.0030
+          garch  1     0.8400       0.8400     0.9500       0.9500      1.0005
+          garch  5     0.7800       0.8400     0.9500       0.9600      1.0030
+          garch 20     0.7700       0.8000     0.9000       0.9400      0.9990
+      gjr_garch  1     0.8500       0.8600     0.9600       0.9600      0.9991
+      gjr_garch  5     0.7900       0.8400     0.9500       0.9700      1.0043
+      gjr_garch 20     0.7800       0.8000     0.9200       0.9400      1.0032
+
+sp500, dev origins 100 (2002-11-18 to 2010-09-30), block 10, 10,000 paths, h = 20
+                 sd_ratio_med  sd_ratio_mean  sd_ratio_min  sd_ratio_max  q80_ratio_mean  pred_linear_mean  kurt_iid_med  kurt_block_med  rho1_mean  rho1_sq_mean  share_wider
+model                                                                                                                                                                         
+zero_return_fhs        0.9039         0.8968        0.8313        0.9310          0.8520            0.8958        0.1540          1.0897    -0.0288        0.1859       0.0000
+ewma                   0.9198         0.9214        0.8778        0.9941          0.9151            0.9360        1.2406          1.5940    -0.0005       -0.0027       0.0000
+garch                  0.9146         0.9134        0.8798        0.9379          0.9156            0.9362        1.1775          1.2408    -0.0017       -0.0122       0.0000
+gjr_garch              0.8998         0.9017        0.8533        0.9535          0.9258            0.9485        3.9234          1.8610     0.0061       -0.0430       0.0000
+
+Against the realised outcome at the same origins: coverage of the central 80% and 95% intervals, and sample CRPS of block over iid (below 1: block is better).
+          model  h  cov80_iid  cov80_block  cov95_iid  cov95_block  crps_ratio
+zero_return_fhs  1     0.8200       0.8200     0.9300       0.9300      1.0008
+zero_return_fhs  5     0.8900       0.8500     0.9700       0.9200      0.9935
+zero_return_fhs 20     0.8800       0.8100     0.9600       0.9500      0.9888
+           ewma  1     0.8200       0.8300     0.9800       0.9800      0.9996
+           ewma  5     0.8800       0.8800     0.9900       0.9800      0.9924
+           ewma 20     0.8700       0.8100     0.9800       0.9800      0.9909
+          garch  1     0.8400       0.8400     0.9800       0.9700      1.0010
+          garch  5     0.9000       0.8800     0.9800       0.9900      0.9885
+          garch 20     0.8800       0.8400     0.9900       0.9900      0.9916
+      gjr_garch  1     0.8700       0.8500     0.9800       0.9800      1.0030
+      gjr_garch  5     0.9000       0.8900     0.9900       0.9900      0.9962
+      gjr_garch 20     0.8900       0.8400     0.9900       0.9900      0.9935
