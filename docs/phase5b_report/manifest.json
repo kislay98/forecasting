@@ -1,0 +1,153 @@
+{
+  "config": {
+    "levels": [
+      0.5,
+      0.8,
+      0.9,
+      0.95,
+      0.99
+    ],
+    "n_paths": 10000,
+    "seed": 20260926,
+    "series": [
+      {
+        "H": 20,
+        "columns": {
+          "date": "Date",
+          "id": null,
+          "value": "Close"
+        },
+        "date_format": "%d %b %Y",
+        "decision_horizons": [
+          1,
+          5,
+          20
+        ],
+        "duplicates": "error",
+        "freq": "trading_days",
+        "id": "sp500",
+        "initial_window": 500,
+        "m": 1,
+        "models": [
+          "zero_return_fhs",
+          "ewma",
+          "garch_normal",
+          "garch",
+          "gjr_garch"
+        ],
+        "n_dev_origins": 100,
+        "n_test_origins": 200,
+        "origin_step": 20,
+        "positive": false,
+        "rolling_length": 500,
+        "sarima_search": "stepwise",
+        "sma_windows": [
+          5,
+          20,
+          60,
+          250
+        ],
+        "source": "csv:../../data/sp500.csv",
+        "start": "1996-01-01",
+        "target": "cumulative_returns",
+        "transform": "none",
+        "warmup_models": "baselines",
+        "window": "both"
+      }
+    ]
+  },
+  "content_hash": "0ef83c971bab7713f45590cf5fc2eb6dd30b7ac44fc598200f4fd1bcfbd6709f",
+  "created_utc": "2026-09-26T12:04:33+00:00",
+  "data_hashes": {
+    "sp500": "5a725dac61af67994939db19f59c0bbe17d29e9b29da0ea2489fe14486e2ab52"
+  },
+  "gate": {
+    "alpha": 0.05,
+    "commit": "e9022578d708758d4663bb994ed7b85f94d623cf",
+    "committed": true,
+    "path": "/home/claude/fc/configs/phase5b/gate.yaml",
+    "present": true,
+    "primary_window": "expanding",
+    "registered": "2026-09-26",
+    "sha256": "223acc7589506e8b04c6405d5b7cbdc9eeaef8f7aacdfae4ad0b17a23b859de6"
+  },
+  "git": "b76eba38e27f87e64c1615ba6e48f443884b0b6d-dirty-ca69c539",
+  "plans": {
+    "sp500": {
+      "initial_window": 500,
+      "mode": "full",
+      "n_dev": 100,
+      "n_origins": 361,
+      "n_test": 200,
+      "n_warmup": 61,
+      "origin_step": 20,
+      "reduced": false,
+      "windows": [
+        "expanding",
+        "rolling"
+      ]
+    }
+  },
+  "rows": {
+    "failed": 840,
+    "ok": 64040,
+    "total": 64880
+  },
+  "run_id": "bae058ac35a5322d",
+  "selections": {
+    "best_baseline": {},
+    "best_candidate": {
+      "sp500": {
+        "expanding": {
+          "dev_mase": 1.87785835745557,
+          "model": "zero_return_fhs",
+          "ranking": [
+            "zero_return_fhs",
+            "ewma",
+            "garch_normal",
+            "garch",
+            "gjr_garch"
+          ],
+          "scores": {
+            "ewma": 1.8871401244892305,
+            "garch": 1.891757464045754,
+            "garch_normal": 1.89058627085005,
+            "gjr_garch": 1.8932003197379554,
+            "zero_return_fhs": 1.87785835745557
+          },
+          "with_intervals": "zero_return_fhs"
+        },
+        "rolling": {
+          "dev_mase": 1.7225257549555357,
+          "model": "garch",
+          "ranking": [
+            "garch",
+            "garch_normal",
+            "zero_return_fhs",
+            "ewma",
+            "gjr_garch"
+          ],
+          "scores": {
+            "ewma": 1.8524205910871556,
+            "garch": 1.7225257549555357,
+            "garch_normal": 1.7236930809149036,
+            "gjr_garch": 1.8615405731017003,
+            "zero_return_fhs": 1.8520189979061084
+          },
+          "with_intervals": "garch"
+        }
+      }
+    },
+    "sma": {}
+  },
+  "versions": {
+    "forecasting": "0.1.0",
+    "joblib": "1.6.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.11.15",
+    "scipy": "1.17.1"
+  },
+  "warnings": []
+}

@@ -1,0 +1,170 @@
+{
+  "config": {
+    "levels": [
+      0.5,
+      0.8,
+      0.9,
+      0.95,
+      0.99
+    ],
+    "n_paths": 10000,
+    "seed": 20260925,
+    "series": [
+      {
+        "H": 20,
+        "columns": {
+          "date": "Date",
+          "id": null,
+          "value": "Close"
+        },
+        "date_format": "%d %b %Y",
+        "decision_horizons": [
+          1,
+          5
+        ],
+        "duplicates": "error",
+        "freq": "trading_days",
+        "id": "sp500",
+        "initial_window": 500,
+        "m": 1,
+        "models": [
+          "zero_return",
+          "zero_return_fhs",
+          "ewma",
+          "garch_normal",
+          "garch",
+          "gjr_garch"
+        ],
+        "n_dev_origins": 200,
+        "n_test_origins": 400,
+        "origin_step": 5,
+        "positive": false,
+        "rolling_length": 500,
+        "sarima_search": "stepwise",
+        "sma_windows": [
+          5,
+          20,
+          60,
+          250
+        ],
+        "source": "csv:../../data/sp500.csv",
+        "start": "1996-01-01",
+        "target": "returns",
+        "transform": "none",
+        "warmup_models": "baselines",
+        "window": "both"
+      }
+    ]
+  },
+  "content_hash": "dcab9ceba83451769f394f0da1dfec896645e8d2146c7d0cc0eea767367f6fca",
+  "created_utc": "2026-09-26T12:02:40+00:00",
+  "data_hashes": {
+    "sp500": "5a725dac61af67994939db19f59c0bbe17d29e9b29da0ea2489fe14486e2ab52"
+  },
+  "gate": {
+    "alpha": 0.05,
+    "commit": "b76eba38e27f87e64c1615ba6e48f443884b0b6d",
+    "committed": true,
+    "path": "/home/claude/fc/configs/phase5a/gate.yaml",
+    "present": true,
+    "primary_window": "expanding",
+    "registered": "2026-09-26",
+    "sha256": "9e05b0027254f798cd9981eb93c05875fa9044595df3acd97a62257b455b42ce"
+  },
+  "git": "b76eba38e27f87e64c1615ba6e48f443884b0b6d-dirty-ca69c539",
+  "plans": {
+    "sp500": {
+      "initial_window": 500,
+      "mode": "full",
+      "n_dev": 200,
+      "n_origins": 1443,
+      "n_test": 400,
+      "n_warmup": 843,
+      "origin_step": 5,
+      "reduced": false,
+      "windows": [
+        "expanding",
+        "rolling"
+      ]
+    }
+  },
+  "rows": {
+    "failed": 1920,
+    "ok": 243240,
+    "total": 245160
+  },
+  "run_id": "93af45770cfd562b",
+  "selections": {
+    "best_baseline": {
+      "sp500": {
+        "expanding": {
+          "dev_mase": 0.4482082264375778,
+          "model": "zero_return",
+          "scores": {
+            "zero_return": 0.4482082264375778
+          }
+        },
+        "rolling": {
+          "dev_mase": 0.6869358153677716,
+          "model": "zero_return",
+          "scores": {
+            "zero_return": 0.6869358153677716
+          }
+        }
+      }
+    },
+    "best_candidate": {
+      "sp500": {
+        "expanding": {
+          "dev_mase": 0.4482082264375778,
+          "model": "ewma",
+          "ranking": [
+            "ewma",
+            "garch",
+            "garch_normal",
+            "gjr_garch",
+            "zero_return_fhs"
+          ],
+          "scores": {
+            "ewma": 0.4482082264375778,
+            "garch": 0.4482082264375778,
+            "garch_normal": 0.4482082264375778,
+            "gjr_garch": 0.4482082264375778,
+            "zero_return_fhs": 0.4482082264375778
+          },
+          "with_intervals": "ewma"
+        },
+        "rolling": {
+          "dev_mase": 0.6869358153677716,
+          "model": "ewma",
+          "ranking": [
+            "ewma",
+            "garch",
+            "garch_normal",
+            "gjr_garch",
+            "zero_return_fhs"
+          ],
+          "scores": {
+            "ewma": 0.6869358153677716,
+            "garch": 0.6869358153677716,
+            "garch_normal": 0.6869358153677716,
+            "gjr_garch": 0.6869358153677716,
+            "zero_return_fhs": 0.6869358153677716
+          },
+          "with_intervals": "ewma"
+        }
+      }
+    },
+    "sma": {}
+  },
+  "versions": {
+    "forecasting": "0.1.0",
+    "joblib": "1.6.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "python": "3.11.15",
+    "scipy": "1.17.1"
+  },
+  "warnings": []
+}
