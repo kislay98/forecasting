@@ -20,13 +20,23 @@ import yaml
 from forecasting.errors import ConfigError
 
 Freq = Literal["monthly", "quarterly", "weekly", "trading_days"]
-Target = Literal["level", "returns"]
+Target = Literal["level", "returns", "cumulative_returns"]
 Duplicates = Literal["error", "sum", "mean"]
 TransformMode = Literal["none", "log", "boxcox", "auto"]
 WindowMode = Literal["expanding", "rolling", "both"]
 
 FREQS: tuple[str, ...] = ("monthly", "quarterly", "weekly", "trading_days")
-TARGETS: tuple[str, ...] = ("level", "returns")
+TARGETS: tuple[str, ...] = ("level", "returns", "cumulative_returns")
+# Both are derived from prices by taking log returns, so they slice, validate and
+# transform identically. They differ only in what the truth at horizon h is: the single
+# day's return at t+h, or the whole move from t to t+h.
+RETURN_TARGETS: tuple[str, ...] = ("returns", "cumulative_returns")
+
+
+def is_return_target(target: str) -> bool:
+    return target in RETURN_TARGETS
+
+
 DUPLICATES: tuple[str, ...] = ("error", "sum", "mean")
 TRANSFORMS: tuple[str, ...] = ("none", "log", "boxcox", "auto")
 WINDOWS: tuple[str, ...] = ("expanding", "rolling", "both")
@@ -99,7 +109,7 @@ SERIES_KEYS = {
     "sarima_search",
 }
 REQUIRED_SERIES_KEYS = ("id", "source", "freq", "H")
-TOP_KEYS = {"series", "seed", "levels", "output_dir", "n_jobs"}
+TOP_KEYS = {"series", "seed", "levels", "output_dir", "n_jobs", "n_paths"}
 COLUMN_KEYS = {"date", "value", "id"}
 # Keys that never change results: excluded from run_id.
 NON_RESULT_KEYS = ("base_dir", "output_dir", "n_jobs")
@@ -169,6 +179,9 @@ class RunConfig:
     levels: tuple[float, ...] = DEFAULT_LEVELS
     output_dir: str = "runs"
     n_jobs: int = 1
+    # Simulated paths per fold for a cumulative target. Changes results, so unlike
+    # n_jobs it is part of the run_id.
+    n_paths: int = 10000
     base_dir: Path = Path(".")
 
     def to_canonical_json(self) -> str:
@@ -321,10 +334,10 @@ def _parse_series(raw: Any, i: int) -> SeriesConfig:
         raise ConfigError(f"{p}.date_format", "must be a strftime string, e.g. '%d-%b-%Y'")
 
     # ---- backtest keys (M2). Defaults depend on freq and target.
-    transform = raw.get("transform", "none" if target == "returns" else "auto")
+    transform = raw.get("transform", "none" if is_return_target(target) else "auto")
     if transform not in TRANSFORMS:
         raise ConfigError(f"{p}.transform", f"must be one of {list(TRANSFORMS)}")
-    if target == "returns" and transform != "none":
+    if is_return_target(target) and transform != "none":
         raise ConfigError(
             f"{p}.transform",
             "must be none for target: returns (the log return is the transform; "
@@ -348,8 +361,15 @@ def _parse_series(raw: Any, i: int) -> SeriesConfig:
     if initial_window < 2:
         raise ConfigError(f"{p}.initial_window", "must be at least 2")
 
-    allowed = RETURN_MODELS if target == "returns" else LEVEL_MODELS
-    default = DEFAULT_RETURN_MODELS if target == "returns" else DEFAULT_LEVEL_MODELS
+    if target == "cumulative_returns":
+        # The cumulative distribution comes from simulated paths, so only models that
+        # can simulate are allowed. There is no point letting a config ask a point
+        # forecaster for the shape of a 20-day loss.
+        allowed = default = RETURN_VARIANCE
+    elif is_return_target(target):
+        allowed, default = RETURN_MODELS, DEFAULT_RETURN_MODELS
+    else:
+        allowed, default = LEVEL_MODELS, DEFAULT_LEVEL_MODELS
     models_raw = raw.get("models")
     if models_raw is None:
         models = tuple(x for x in default if not (x == "seasonal_naive" and m == 1))
@@ -390,7 +410,9 @@ def _parse_series(raw: Any, i: int) -> SeriesConfig:
         ):
             raise ConfigError(f"{p}.sma_windows", "must be a non-empty list of integers >= 2")
         sma_windows = tuple(sorted(set(sma_raw)))
-    too_long = [k for k in sma_windows if k > initial_window - (1 if target == "returns" else 0)]
+    too_long = [
+        k for k in sma_windows if k > initial_window - (1 if is_return_target(target) else 0)
+    ]
     if too_long:
         sma_windows = tuple(k for k in sma_windows if k not in too_long)
         warnings.append(f"sma windows {too_long} exceed the initial window and are dropped")
@@ -463,6 +485,9 @@ def parse_config(raw: Any, base_dir: Path = Path(".")) -> RunConfig:
     if not isinstance(output_dir, str) or not output_dir:
         raise ConfigError("output_dir", "must be a path string")
     n_jobs = raw.get("n_jobs", 1)
+    n_paths = raw.get("n_paths", 10000)
+    if not isinstance(n_paths, int) or isinstance(n_paths, bool) or n_paths < 1000:
+        raise ConfigError("n_paths", "must be an integer of at least 1000")
     if not _is_int(n_jobs) or n_jobs == 0 or n_jobs < -1:
         raise ConfigError("n_jobs", "must be a positive integer or -1 (all cores)")
     return RunConfig(
@@ -471,6 +496,7 @@ def parse_config(raw: Any, base_dir: Path = Path(".")) -> RunConfig:
         levels=_parse_levels(raw.get("levels")),
         output_dir=output_dir,
         n_jobs=n_jobs,
+        n_paths=n_paths,
         base_dir=base_dir,
     )
 

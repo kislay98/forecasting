@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from forecasting.config import SeriesConfig
+from forecasting.config import SeriesConfig, is_return_target
 
 Role = Literal["warmup", "dev", "test"]
 
@@ -39,7 +39,7 @@ class OriginPlan:
 
 
 def _offset(scfg: SeriesConfig) -> int:
-    return 1 if scfg.target == "returns" else 0
+    return 1 if is_return_target(scfg.target) else 0
 
 
 def _count(n_rows: int, initial: int, scfg: SeriesConfig) -> int:

@@ -31,11 +31,11 @@ from joblib import Parallel, delayed
 
 from forecasting.backtest.splits import Origin, OriginPlan, make_origins
 from forecasting.backtest.store import ForecastStore, level_tag
-from forecasting.config import RunConfig, SeriesConfig
+from forecasting.config import RunConfig, SeriesConfig, is_return_target
 from forecasting.data.validate import Series
 from forecasting.errors import FitError, ForecastContractError, TransformError
 from forecasting.evaluation.diagnostics import residual_tests
-from forecasting.models.base import ModelFactory, check_result
+from forecasting.models.base import ForecastResult, ModelFactory, check_result
 from forecasting.models.combination import MEMBERS, combine
 from forecasting.models.registry import build_factories
 from forecasting.transforms import (
@@ -64,13 +64,22 @@ def _labels(index: pd.Index) -> list[str]:
     return [str(p) for p in index]
 
 
-def _truth(values: np.ndarray, t: int, H: int, returns: bool) -> tuple[np.ndarray, np.ndarray]:
-    """(y_true, level_true) for h = 1..H, read by position from the full series."""
+def _truth(
+    values: np.ndarray, t: int, H: int, returns: bool, cumulative: bool = False
+) -> tuple[np.ndarray, np.ndarray]:
+    """(y_true, level_true) for h = 1..H, read by position from the full series.
+
+    For a cumulative target the truth at h is the whole move from the origin,
+    log(p_{t+h} / p_t), not the single day's return at t+h. That is the object a
+    holding-period loss is about, and it is why h-step windows from nearby origins
+    overlap and the origin step has to be at least h for the sequence tests.
+    """
     pos = np.arange(t + 1, t + H + 1)
     level = values[pos]
     if returns:
+        base = values[t] if cumulative else values[pos - 1]
         with np.errstate(invalid="ignore", divide="ignore"):
-            y = np.log(values[pos] / values[pos - 1])
+            y = np.log(values[pos] / base)
         return y, level
     return level.copy(), np.full(H, np.nan)
 
@@ -86,13 +95,15 @@ def _run_fold(
     factories: Mapping[str, ModelFactory],
     run_id: str,
     seed: int = 0,
+    n_paths: int = 10000,
 ) -> dict[str, list[Any]]:
     t, H, m = origin.t, scfg.H, scfg.m
-    returns = scfg.target == "returns"
+    returns = is_return_target(scfg.target)
+    cumulative = scfg.target == "cumulative_returns"
     offset = 1 if returns else 0
     start = 0 if window == "expanding" else max(0, t - scfg.rolling_length + 1 - offset)
 
-    y_true, level_true = _truth(values, t, H, returns)
+    y_true, level_true = _truth(values, t, H, returns, cumulative)
     missing = ~np.isfinite(y_true)
     hs = np.arange(1, H + 1)
     tags = [level_tag(lv) for lv in levels]
@@ -205,10 +216,36 @@ def _run_fold(
         if lr is None:
             return nan
         with np.errstate(over="ignore"):
-            prices = lr.inverse(mean)
+            # A cumulative mean is already the move from the origin, so accumulating it
+            # again would compound the same returns twice.
+            prices = values[t] * np.exp(mean) if cumulative else lr.inverse(mean)
         if not np.isfinite(prices).all():
             raise ForecastContractError("implied price path overflows (non-finite)")
         return prices
+
+    def simulated_result(model, name: str) -> ForecastResult:
+        """Cumulative quantiles from simulated paths.
+
+        The model only knows how to step one period forward; accumulating is the
+        engine's job, the same way slicing is. Paths are drawn with the fold's own
+        seed, so a rerun reproduces them exactly.
+        """
+        if not hasattr(model, "simulate"):
+            raise FitError(name, "a cumulative target needs a model that can simulate")
+        rng = np.random.default_rng(fold_seed(seed, series_uid, window, t, f"{name}|paths"))
+        paths = np.cumsum(np.asarray(model.simulate(H, n_paths, rng), dtype=float), axis=1)
+        if paths.shape != (n_paths, H):
+            raise ForecastContractError(f"{name}: simulate returned {paths.shape}")
+        lower, upper = {}, {}
+        for lv in levels:
+            lo_q, hi_q = np.quantile(paths, [(1 - lv) / 2, (1 + lv) / 2], axis=0)
+            lower[lv], upper[lv] = lo_q, hi_q
+        return ForecastResult(
+            mean=paths.mean(axis=0),
+            lower=lower,
+            upper=upper,
+            info={"variant": getattr(model, "variant", ""), "n_paths": n_paths},
+        )
 
     # 5: one fresh model per (window, origin, model).
     member_means: dict[str, np.ndarray | None] = {}
@@ -222,7 +259,7 @@ def _run_fold(
             if model.uses_transform:
                 tr, tr_label, z_in = variance_transform()
             model.fit(z_in)
-            res = model.predict(H, levels)
+            res = simulated_result(model, name) if cumulative else model.predict(H, levels)
             check_result(res, H, levels)
             variant = str(res.info.get("variant", ""))
             mean_t = np.asarray(res.mean, dtype=float)
@@ -282,7 +319,7 @@ def run_backtest(
     parallel = Parallel(n_jobs=cfg.n_jobs, backend="loky" if cfg.n_jobs != 1 else "sequential")
     chunks = parallel(
         delayed(_run_fold)(
-            values, index, labels, o, w, scfg, cfg.levels, factories, run_id, cfg.seed
+            values, index, labels, o, w, scfg, cfg.levels, factories, run_id, cfg.seed, cfg.n_paths
         )
         for o, w in tasks
     )

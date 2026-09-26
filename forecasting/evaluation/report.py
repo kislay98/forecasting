@@ -30,6 +30,7 @@ from matplotlib.ticker import MaxNLocator
 
 from forecasting.backtest.selection import is_baseline, select_best_candidate
 from forecasting.backtest.store import ForecastStore
+from forecasting.config import is_return_target
 from forecasting.evaluation.metrics import BUCKET_NAMES
 from forecasting.evaluation.scoring import Scores, SeriesLabels, pairwise, score, series_labels
 from forecasting.evaluation.tests import MIN_N_EFF_DM
@@ -275,7 +276,7 @@ def exit_decision(
     if "ets" in set(t["model"]):
         base, base_name = t[t["model"] == "ets"].set_index("h")["mae"], "ETS"
         others = cand[cand["model"] != "ets"]
-    elif lab.target == "returns":
+    elif is_return_target(lab.target):
         base_name = "the reference"
         ref = t[t["reference"] == t["model"]]
         base = ref.set_index("h")["mae"]
@@ -412,7 +413,7 @@ def rq4(res: pd.DataFrame, model: str | None, target: str) -> Verdict:
     if ar == "yes":
         lines.append(
             "Volatility clusters: this confirms U6 (GARCH in Phase 2)."
-            if target == "returns"
+            if is_return_target(target)
             else "Residuals are heteroskedastic: Phase 2 needs a variance model or scaling."
         )
     answer = f"autocorrelation {ac}, ARCH {ar}"
@@ -834,7 +835,7 @@ def _series_report(
             "**Reduced mode: the series is between the hard floor and the minimum, so "
             "every test below is underpowered.**",
         ]
-    if lab.target == "returns":
+    if is_return_target(lab.target):
         md += [
             "",
             "Treated as a price index: dividends are not included (Phase 1 uses the "
@@ -899,7 +900,7 @@ def _series_report(
         fname = f"{uid}_relative_mae.png"
         figures[fname] = plot_relative_mae(point, uid, w, ref)
         md += [f"![Relative MAE by horizon for {uid}](figures/{fname})", ""]
-    naive = "zero_return" if lab.target == "returns" else "naive"
+    naive = "zero_return" if is_return_target(lab.target) else "naive"
     if "sma" in set(point["model"]) and naive in set(point["model"]):
         pw = pairwise(frame, manifest, uid, w, "sma", naive)
         pt = pw[pw["h"].isin(th)]

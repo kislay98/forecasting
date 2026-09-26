@@ -28,7 +28,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from forecasting.config import SeriesConfig
+from forecasting.config import SeriesConfig, is_return_target
 from forecasting.errors import (
     DuplicateTimestampError,
     IrregularFrequencyError,
@@ -351,14 +351,14 @@ def _validate_one(
             f"{n_negative} negative values with positive: true, e.g. {_examples(obs[obs < 0].index)}",
             uid,
         )
-    if scfg.target == "returns" and (obs <= 0).any():
+    if is_return_target(scfg.target) and (obs <= 0).any():
         raise NonPositivePriceError(
             f"{int((obs <= 0).sum())} values <= 0; log returns need a strictly positive level",
             uid,
         )
 
     # 8 volume. Returns lose one observation to differencing.
-    T = len(y_full) - (1 if scfg.target == "returns" else 0)
+    T = len(y_full) - (1 if is_return_target(scfg.target) else 0)
     t_floor, t_min = volume_thresholds(scfg)
     if t_floor > T:
         raise TooShortError(

@@ -28,7 +28,7 @@ from typing import Any
 
 import numpy as np
 
-from forecasting.errors import FitError
+from forecasting.errors import FitError, NotFittedError
 from forecasting.models.base import BaseForecaster
 
 # arch fits in percent units; daily log returns are around 0.01 and the optimiser
@@ -95,6 +95,27 @@ class VarianceModel(BaseForecaster):
             lower[lv], upper[lv] = sd * ql, sd * qu
         return type(res)(mean=res.mean, lower=lower, upper=upper, info=self._info())
 
+    def simulate(self, h: int, n_paths: int, rng: np.random.Generator) -> np.ndarray:
+        """(n_paths, h) simulated one-step returns, for building a cumulative distribution.
+
+        Innovations are drawn with replacement from this fit's standardised residuals
+        (filtered historical simulation), so the simulated tails have the shape the data
+        had rather than the shape a Normal would impose.
+
+        The default treats the conditional sd path as fixed at its forecast, which is
+        exact for a constant-variance model and an approximation for any model whose
+        variance responds to the returns along the path. Those override it.
+        """
+        if not self._fitted:
+            raise NotFittedError(f"{self.name}: simulate before fit")
+        z = self._draw(h, n_paths, rng)
+        return z * self._forecast_sd(h)[None, :]
+
+    def _draw(self, h: int, n_paths: int, rng: np.random.Generator) -> np.ndarray:
+        if self._z is None or len(self._z) < MIN_STD_RESID:
+            raise FitError(self.name, f"need {MIN_STD_RESID} standardised residuals to simulate")
+        return rng.choice(self._z, size=(n_paths, h), replace=True)
+
     def _residuals(self) -> np.ndarray:
         return np.asarray(self._z, dtype=float)
 
@@ -146,6 +167,22 @@ class EWMA(VarianceModel):
     def _forecast_sd(self, h: int) -> np.ndarray:
         return np.full(h, float(np.sqrt(self._next)))
 
+    def simulate(self, h: int, n_paths: int, rng: np.random.Generator) -> np.ndarray:
+        """The EWMA forecast is flat in h, but along a simulated path the variance still
+        responds to the returns drawn. A quiet path stays quiet and a violent one stays
+        violent, which is the clustering that makes the cumulative tail fatter than
+        sigma * sqrt(h) would say."""
+        if not self._fitted:
+            raise NotFittedError(f"{self.name}: simulate before fit")
+        z = self._draw(h, n_paths, rng)
+        lam = EWMA_LAMBDA
+        var = np.full(n_paths, float(self._next))
+        out = np.empty((n_paths, h))
+        for s in range(h):
+            out[:, s] = np.sqrt(var) * z[:, s]
+            var = lam * var + (1 - lam) * out[:, s] ** 2
+        return out
+
 
 class GARCH(VarianceModel):
     """GARCH(1,1), or GJR-GARCH(1,1,1) when asymmetric, zero mean, fitted by arch.
@@ -190,6 +227,29 @@ class GARCH(VarianceModel):
         if var.shape != (h,) or not np.isfinite(var).all() or (var <= 0).any():
             raise FitError(self.name, "variance forecast is not finite and positive")
         return np.sqrt(var) / SCALE
+
+    def simulate(self, h: int, n_paths: int, rng: np.random.Generator) -> np.ndarray:
+        """Run the fitted recursion forward path by path, in the percent units arch fits
+        in, then divide back. The asymmetric term needs the sign of the simulated return,
+        which is exactly why this cannot be done from the variance forecast alone."""
+        if not self._fitted:
+            raise NotFittedError(f"{self.name}: simulate before fit")
+        z = self._draw(h, n_paths, rng)
+        pr = self._res.params
+        omega = float(pr["omega"])
+        alpha = float(pr.get("alpha[1]", 0.0))
+        beta = float(pr.get("beta[1]", 0.0))
+        gamma = float(pr.get("gamma[1]", 0.0)) if self.asymmetric else 0.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            f = self._res.forecast(horizon=1, reindex=False)
+        var = np.full(n_paths, float(np.asarray(f.variance.to_numpy())[-1, 0]))
+        out = np.empty((n_paths, h))
+        for s in range(h):
+            e = np.sqrt(var) * z[:, s]
+            out[:, s] = e
+            var = omega + (alpha + gamma * (e < 0)) * e**2 + beta * var
+        return out / SCALE
 
     def _info(self) -> dict[str, Any]:
         return {"variant": self.variant, "persistence": getattr(self, "persistence", float("nan"))}

@@ -37,6 +37,7 @@ import pandas as pd
 
 from forecasting.backtest.selection import is_baseline
 from forecasting.backtest.store import ForecastStore, level_tag, levels_from_columns
+from forecasting.config import is_return_target
 from forecasting.evaluation import diagnostics as dg
 from forecasting.evaluation import metrics as mt
 from forecasting.evaluation import tests as st
@@ -219,7 +220,7 @@ class _Ctx:
     # ------------------------------------------------------------ point, DM, MCS, skill
     def per_horizon(self, rows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         lab = self.lab
-        returns = lab.target == "returns"
+        returns = is_return_target(lab.target)
         bucket = mt.bucket_of(lab.m, lab.H)
         test_h = set(lab.test_horizons)
         mape_ok = not returns and bool((rows["y_true"] > 0).all())
