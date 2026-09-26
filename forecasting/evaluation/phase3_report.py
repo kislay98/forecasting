@@ -28,9 +28,9 @@ FAN_LEVELS = (0.5, 0.8, 0.95)
 
 def _fmt(v: Any, nd: int = 4) -> str:
     if v is None or (isinstance(v, float) and not np.isfinite(v)):
-        return "n/a"
+        return "not tested"
     if isinstance(v, bool):
-        return "yes" if v else "no"
+        return "yes" if v else "NO"
     if isinstance(v, float):
         return f"{v:.{nd}f}"
     return str(v)
@@ -102,7 +102,7 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
     a(f"# Holding-period risk: {scfg.id}")
     a("")
     a(
-        f"Run `{manifest.get('run_id')}`, git `{str(manifest.get('git_sha'))[:12]}`, "
+        f"Run `{manifest.get('run_id')}`, git `{str(manifest.get('git'))[:12]}`, "
         f"{window} window, {cfg.n_paths:,} simulated paths per origin."
     )
     a("")
@@ -157,8 +157,9 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
         "Losses are fractions of the position, so 0.05 is a 5% loss. `var_mean_loss` is "
         "the average VaR the model quoted; `es_mean_loss` is the average loss it expected "
         "given a breach. `es_ok` is whether a bootstrap interval on realised minus "
-        "predicted covers zero: no, with a negative bias, means breaches were worse than "
-        "the model said."
+        "predicted covers zero: NO, with a negative bias, means breaches were worse than "
+        "the model said. `not tested` means fewer than ten breaches, which is not a pass: "
+        "at these sample sizes most tail rows say nothing either way."
     )
     a("")
     risk = risk_table(frame, scfg.origin_step, cfg.levels, window, role="test", seed=cfg.seed)

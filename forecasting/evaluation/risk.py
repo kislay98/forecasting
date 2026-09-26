@@ -46,7 +46,11 @@ class ESResult:
     bias: float  # realised minus predicted, in log-return units; negative is optimistic
     ci_low: float
     ci_high: float
-    covers_zero: bool
+    covers_zero: bool | None  # None means the test declined, which is not a pass
+
+    @property
+    def tested(self) -> bool:
+        return self.covers_zero is not None
 
 
 def es_backtest(y, var, es, reps: int = BOOTSTRAP_REPS, seed: int = 0) -> ESResult:
@@ -67,8 +71,10 @@ def es_backtest(y, var, es, reps: int = BOOTSTRAP_REPS, seed: int = 0) -> ESResu
     breach = ok & (y <= var)
     n = int(breach.sum())
     if n < MIN_BREACHES:
+        # Declining to judge is not a pass. Reporting "covers zero" here would turn
+        # "there were three breaches" into a clean bill of health.
         nan = float("nan")
-        return ESResult(n, nan, nan, nan, nan, nan, True)
+        return ESResult(n, nan, nan, nan, nan, nan, None)
     d = y[breach] - es[breach]
     rng = np.random.default_rng(seed)
     means = rng.choice(d, size=(reps, n), replace=True).mean(axis=1)
@@ -132,7 +138,7 @@ def risk_table(
                     "es_bias": r.bias,
                     "es_ci_low": r.ci_low,
                     "es_ci_high": r.ci_high,
-                    "es_ok": r.covers_zero,
+                    "es_ok": r.covers_zero,  # None: too few breaches to test
                 }
             )
     table = pd.DataFrame(out)

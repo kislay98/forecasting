@@ -68,7 +68,7 @@ def test_es_backtest_declines_on_too_few_breaches():
     r = es_backtest(y, np.full_like(y, -5.0), np.full_like(y, -6.0), seed=0)
     assert r.n_breaches < 10
     assert np.isnan(r.bias)
-    assert r.covers_zero  # declining to judge is not the same as failing
+    assert r.covers_zero is None  # declining to judge is neither a pass nor a fail
 
 
 def test_es_is_always_worse_than_var():
