@@ -134,3 +134,22 @@ uncorrected numbers, 0.911, 0.946, 0.905, say it more strongly.
   factor. Their 2008 and 2020 are the same 2008 and 2020, so these are not independent
   samples in the way two seeds of a simulation are.
 - 200 test origins, so anything read from the far tail of the risk table is illustrative.
+
+## Correction, 27 Sep 2026 (OP-10)
+
+The conformal layer was correcting each level from its own conformity scores with nothing
+tying the levels together, so the corrected grid could cross: a wider interval produces more
+negative scores, so a higher level shrinks further, and often enough it shrank past the level
+inside it. On this run 5,783 of 20,000 scored rows crossed somewhere, 28.9%. It was found by
+the threshold work reading the whole grid, because the gates read only 80% and 95%.
+
+The fix pushes outer bounds outward until the grid is ordered, never moving an inner level.
+Rerunning the report on the same store changes exactly one published number above:
+
+| Cell | As published | Corrected |
+|---|---|---|
+| 95% coverage at h = 20 | 0.960 | 0.970 |
+
+The band is [0.91, 0.98], so the check passes either way and the decision is unchanged: GO,
+21 of 21. The table earlier in this file is left as it was published and this note is the
+correction, because editing a recorded decision in place is how a record stops being one.

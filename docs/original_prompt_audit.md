@@ -20,8 +20,10 @@ unreachable in principle on this data because the mean is not forecastable at al
 entire value of the work sits in the uncertainty half that the prompt treated as
 secondary.
 
-Four things the prompt asked for are genuinely not done, listed at the end with what each
-would cost.
+Three of the four things this audit first listed as not done have since been done, on 26 and
+27 Sep 2026: the block bootstrap as Phase 6, parameter uncertainty as Phase 7, and threshold
+probabilities from the stored grid. The fourth, monitoring, waits on something being
+deployed. The table at the end carries each one's result.
 
 ## Section by section
 
@@ -74,7 +76,7 @@ Read against what this project decided, the conclusion is specific:
 
 `scripts/mc_standard_error.py` reproduces the table.
 
-## What is not done
+## What was not done, and what has since been done
 
 | Gap | Prompt section | Why it matters | Cost |
 |---|---|---|---|
@@ -88,6 +90,35 @@ before the fact: a modern model (experiment 8) waits on covariates or a panel; B
 state-space methods wait on a short series where their advantage is real; change-point
 detection and regime switching wait on repeated regimes rather than the single transitions
 the samples contain.
+
+## Closing the study, 27 Sep 2026
+
+The three open items were taken as three registered pieces of work, not as patches, and two
+of the three answered against the change:
+
+| Item | Answer |
+|---|---|
+| Block bootstrap (P6) | The dependence is real and accounting for it does not help: it widens Nifty's 20-day distribution by about 10% and narrows the S&P's by about 10%, and lost to iid on Nifty's CRPS at a month. The iid sampler is kept, and the finding that the choice alone moves a 20-day expected shortfall by 10 to 15%, three times the simulation noise in OP-1, is carried as model uncertainty |
+| Parameter uncertainty (P7) | Effectively none is missing: under 0.2% of interval width at h = 20, a tenth of the simulation noise already there. The assumption in this audit's own first version, that the published intervals were too narrow, was wrong, because a zero-mean model's parameter error mixes scales rather than widening |
+| Threshold probabilities (OP-4) | The stored grid supports them, so no store change was needed. Interpolation error averages 0.0008 in the tails, half the simulation noise, and reaches 0.019 in the centre. Thresholds beyond the outermost stored quantile are refused rather than extrapolated |
+
+Two defects surfaced while closing, both found by the threshold work reading the whole
+quantile grid rather than by any gate:
+
+- The conformal correction could return a crossed grid, 19.3% of Phase 4's corrected rows and
+  28.9% of Phase 5b's, mostly a 99% band inside the 95%. Fixed (OP-12). Recomputing both
+  decisions moved one published cell, P5b's 95% coverage at h = 20 from 0.960 to 0.970, and
+  changed neither decision.
+- `forecast risk <run dir>` had never worked. Fixed (OP-14).
+
+Two claims in this audit need narrowing as a result of all three sessions:
+
+- **A1, reproducibility, holds per machine.** Two sessions independently found that runs of
+  the same commit on different machines are not bit-identical. Decisions recompute to their
+  registered cells, and the byte-for-byte claim is about one machine.
+- **Robustness is still not established.** Two equity indices sharing the same crises, plus
+  a sampler choice that moves a 20-day expected shortfall by 10 to 15% depending on which
+  defensible option is taken, is the honest ceiling of what this study demonstrates.
 
 ## The honest summary
 

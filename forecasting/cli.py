@@ -15,7 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from forecasting.config import load_config
+from forecasting.config import SERIES_KEYS, TOP_KEYS, load_config, parse_config
 from forecasting.errors import AdapterError, ConfigError, SchemaError
 from forecasting.evaluation.report import report_run
 from forecasting.pipeline import compute_run_id, run, validate_all
@@ -179,7 +179,24 @@ def cmd_risk(target: Path, out=None, thresholds=None) -> int:
     out = out or sys.stdout
     if target.is_dir():
         run_dir = target
-        cfg = load_config(Path(json.loads((run_dir / "manifest.json").read_text())["config"]))
+        # The manifest stores the config as its canonical dict, not as a path, so rebuild
+        # it rather than trying to open it. base_dir matters only for resolving a series
+        # source, which this report never reads: it works from the stored forecasts. A run
+        # directory is <config dir>/runs/<run_id> by default, so two levels up is the
+        # config's own folder and the gate beside it is found where it was registered.
+        raw = json.loads((run_dir / "manifest.json").read_text())["config"]
+        # The canonical form carries derived fields (the resolved season `m`, for one)
+        # that the parser rejects as unknown keys, so keep only what a config may declare.
+        raw = {k: v for k, v in raw.items() if k in TOP_KEYS}
+        raw["series"] = [
+            {
+                k: ({ck: cv for ck, cv in v.items() if cv is not None} if k == "columns" else v)
+                for k, v in one.items()
+                if k in SERIES_KEYS
+            }
+            for one in raw.get("series", [])
+        ]
+        cfg = parse_config(raw, base_dir=run_dir.parent.parent)
     else:
         cfg, validated = _load(target, out)
         if validated is None:

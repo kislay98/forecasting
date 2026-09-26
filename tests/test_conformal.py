@@ -6,15 +6,20 @@ wrong width, and it never uses an outcome that was not observable yet.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.stats import norm
 
+from forecasting.backtest.store import level_tag
 from forecasting.evaluation.conformal import (
     MIN_CALIBRATION,
     conformalise,
     correction,
     eligible_mask,
+    enforce_monotone,
 )
 
 
@@ -124,3 +129,64 @@ def test_conformal_marks_rows_it_could_not_calibrate():
     untouched = out[out.conformal_n == 0]
     assert len(untouched) > 0
     assert (untouched["lo_80"] == raw["lo_80"].iloc[0]).all()
+
+
+def test_corrected_grid_is_ordered_and_only_outer_levels_move():
+    """OP-10: per-level corrections can cross, and the repair fixes it from the inside out.
+
+    Found by the threshold work reading the whole grid, not by any gate: the gates read
+    only the 80% and 95% bands, and on Phase 4's store 19.3% of corrected rows crossed
+    somewhere, most at the 95% to 99% pair.
+    """
+    levels = (0.5, 0.8, 0.95)
+    # A grid that crosses: the 95% band sits inside the 80% band.
+    frame = pd.DataFrame(
+        {
+            "lo_50": [-1.0], "hi_50": [1.0],
+            "lo_80": [-2.0], "hi_80": [2.0],
+            "lo_95": [-1.5], "hi_95": [1.5],
+        }
+    )  # fmt: skip
+    fixed = enforce_monotone(frame, levels)
+    assert fixed["lo_95"].iloc[0] == -2.0  # widened out to the 80% bound
+    assert fixed["hi_95"].iloc[0] == 2.0
+    assert fixed["lo_80"].iloc[0] == -2.0  # inner levels untouched
+    assert fixed["hi_80"].iloc[0] == 2.0
+    assert fixed["lo_50"].iloc[0] == -1.0
+    assert fixed["hi_50"].iloc[0] == 1.0
+
+    # An already ordered grid is returned unchanged.
+    ok = pd.DataFrame(
+        {
+            "lo_50": [-1.0], "hi_50": [1.0],
+            "lo_80": [-2.0], "hi_80": [2.0],
+            "lo_95": [-3.0], "hi_95": [3.0],
+        }
+    )  # fmt: skip
+    pd.testing.assert_frame_equal(enforce_monotone(ok, levels), ok)
+
+    # `only` confines the repair to the rows named.
+    two = pd.concat([frame, frame], ignore_index=True)
+    part = enforce_monotone(two, levels, only=pd.Series([True, False]))
+    assert part["hi_95"].iloc[0] == 2.0
+    assert part["hi_95"].iloc[1] == 1.5
+
+
+def test_conformalise_never_returns_a_crossed_grid():
+    """The property the report and the threshold reader depend on, end to end.
+
+    The intervals start deliberately too wide, which is the regime that makes the
+    corrections negative and lets the outer levels overtake the inner ones.
+    """
+    levels = (0.5, 0.8, 0.9, 0.95, 0.99)
+    frame = _toy(n=200, width=1.6)
+    for lv in levels:
+        tag = level_tag(lv)
+        half = float(norm.ppf(0.5 + lv / 2)) * 1.6
+        frame[f"lo_{tag}"] = -half
+        frame[f"hi_{tag}"] = half
+    out = conformalise(frame, levels, window=60, model_window="expanding")
+    tags = [level_tag(lv) for lv in levels]
+    for a, b in pairwise(tags):
+        assert (out[f"lo_{b}"] <= out[f"lo_{a}"] + 1e-12).all(), f"lo crosses {a} to {b}"
+        assert (out[f"hi_{b}"] >= out[f"hi_{a}"] - 1e-12).all(), f"hi crosses {a} to {b}"

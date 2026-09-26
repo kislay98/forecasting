@@ -153,3 +153,15 @@ one-line summary of the two together:
   recorded in P1 through P4. Until then, the check that means something is a direct
   column comparison between stores, which is what was done above.
 - One series, one market, 200 origins, one registered window value.
+
+## Correction, 27 Sep 2026 (OP-10)
+
+The conformal layer could return a crossed quantile grid, on this run in 19.3% of corrected
+rows, mostly the 99% band sitting inside the 95%. See the same note in
+[phase5b_decision.md](phase5b_decision.md) for the mechanism and the fix.
+
+Rerunning the report on the same store leaves every registered cell of this decision
+identical, coverage, Kupiec and independence alike, and the decision unchanged at GO, 21 of
+21. Two CRPS ratios move in the fourth decimal (0.9568 to 0.9567 at h = 1, 0.9721 to 0.9720
+at h = 20) because the repair widens the outer bands slightly and CRPS integrates the whole
+grid. Both remain below 1.0.

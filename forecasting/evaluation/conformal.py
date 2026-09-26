@@ -65,6 +65,44 @@ def correction(scores: np.ndarray, level: float) -> float:
     return float(np.quantile(s, q, method="higher"))
 
 
+def enforce_monotone(
+    frame: pd.DataFrame, levels: tuple[float, ...], only: pd.Series | None = None
+) -> pd.DataFrame:
+    """Push outer bounds outward until the quantile grid is ordered again (OP-10).
+
+    Correcting each level from its own conformity scores lets the grid cross. The scores
+    at a level are max(lo - y, y - hi) for that level's interval, so a wider interval
+    produces more negative scores, so a higher level receives a more negative correction
+    and shrinks further. Often enough it shrinks past the level inside it: on Phase 4's
+    store 19.3% of corrected rows cross somewhere, 3,396 of 20,000 at the 95% to 99% pair
+    alone. A 99% interval narrower than the 95% one is not a conservative reading of the
+    data, it is arithmetic nonsense, and it was found by the threshold work reading the
+    whole grid rather than by any gate, because the gates only read 80% and 95%.
+
+    The repair moves the outer level, never the inner one, for a reason: the correction at
+    a higher level is estimated from a more extreme order statistic of the same 60 scores
+    (the largest of them at 99%, the 58th at 95%), so the outer number is the less reliable
+    of the two. Moving it outward is also the conservative direction for a risk interval.
+
+    A cumulative minimum over lo and maximum over hi, from the innermost level outward, is
+    the whole of it. A level can only move if a level inside it pokes out, so the ordering
+    of the corrections is preserved wherever it was already sound.
+    """
+    tags = [level_tag(lv) for lv in sorted(levels)]
+    mask = np.ones(len(frame), dtype=bool) if only is None else only.to_numpy(dtype=bool)
+    if not mask.any():
+        return frame
+    out = frame.copy()
+    lo = np.column_stack([out.loc[mask, f"lo_{t}"].to_numpy(dtype=float) for t in tags])
+    hi = np.column_stack([out.loc[mask, f"hi_{t}"].to_numpy(dtype=float) for t in tags])
+    lo = np.fmin.accumulate(lo, axis=1)
+    hi = np.fmax.accumulate(hi, axis=1)
+    for k, t in enumerate(tags):
+        out.loc[mask, f"lo_{t}"] = lo[:, k]
+        out.loc[mask, f"hi_{t}"] = hi[:, k]
+    return out
+
+
 def conformalise(
     frame: pd.DataFrame,
     levels: tuple[float, ...],
@@ -115,7 +153,14 @@ def conformalise(
             if lv == max(levels):
                 out.loc[g.index, "conformal_n"] = ns
                 out.loc[g.index, "conformal_q"] = qs
-    return out
+    # Per-level corrections can cross the grid; repair the rows they touched (OP-10).
+    return enforce_monotone(out, levels, only=out["conformal_n"] > 0)
 
 
-__all__ = ["MIN_CALIBRATION", "conformalise", "correction", "eligible_mask"]
+__all__ = [
+    "MIN_CALIBRATION",
+    "conformalise",
+    "correction",
+    "eligible_mask",
+    "enforce_monotone",
+]

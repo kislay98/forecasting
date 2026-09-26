@@ -2,6 +2,8 @@
 
 Run `bae058ac35a5322d`, git `b76eba38e27f`, expanding window, 10,000 simulated paths per origin.
 
+Acceptance check A4: 1.29% of the run's rows are typed failures against a 1% limit, and 0.00% on the expanding window this decision is read from. A failure on the other window cannot reach the numbers below, but it is stated here rather than left in the manifest.
+
 The quantity forecast is the cumulative move over h trading days, log(p_t+h / p_t), converted to a loss as 1 - exp(r). Phase 1 established that the mean of this series is not forecastable, so the point forecast is fixed at zero and everything below is about the spread.
 
 ## Conformal calibration (P4), window 60
@@ -22,7 +24,7 @@ Primary model `gjr_garch`, registered as 2026-09-26 (gate.yaml 223acc758950, com
 | coverage | 1 | 95% | pass | 0.975 against [0.91, 0.98] |
 | kupiec | 1 | 95% | pass | p = 0.0737 against alpha 0.0043 |
 | independence | 1 | 95% | pass | p = 0.6117 against alpha 0.0043 |
-| crps | 1 | - | pass | 0.9080 of zero_return_fhs, must be below 1.0 |
+| crps | 1 | - | pass | 0.9079 of zero_return_fhs, must be below 1.0 |
 | coverage | 5 | 80% | pass | 0.800 against [0.75, 0.85] |
 | kupiec | 5 | 80% | pass | p = 1.0000 against alpha 0.0043 |
 | independence | 5 | 80% | pass | p = 0.1724 against alpha 0.0043 |
@@ -33,9 +35,9 @@ Primary model `gjr_garch`, registered as 2026-09-26 (gate.yaml 223acc758950, com
 | coverage | 20 | 80% | pass | 0.815 against [0.75, 0.85] |
 | kupiec | 20 | 80% | pass | p = 0.5923 against alpha 0.0043 |
 | independence | 20 | 80% | pass | p = 0.6052 against alpha 0.0043 |
-| coverage | 20 | 95% | pass | 0.960 against [0.91, 0.98] |
-| kupiec | 20 | 95% | pass | p = 0.5020 against alpha 0.0043 |
-| independence | 20 | 95% | pass | p = 0.3083 against alpha 0.0043 |
+| coverage | 20 | 95% | pass | 0.970 against [0.91, 0.98] |
+| kupiec | 20 | 95% | pass | p = 0.1622 against alpha 0.0043 |
+| independence | 20 | 95% | pass | p = 0.1545 against alpha 0.0043 |
 | crps | 20 | - | pass | 0.9511 of zero_return_fhs, must be below 1.0 |
 
 ## Calibration of the loss distribution
@@ -49,13 +51,13 @@ Primary model `gjr_garch`, registered as 2026-09-26 (gate.yaml 223acc758950, com
 | zero_return_fhs | 1 | 200 | 0.8400 | 0.1461 | 0.0178 | 0.9850 | 0.0080 | 0.0053 |
 | ewma | 5 | 200 | 0.8000 | 1.0000 | 0.9430 | 0.9450 | 0.7493 | 0.0113 |
 | garch | 5 | 200 | 0.7950 | 0.8601 | 0.4499 | 0.9600 | 0.5020 | 0.0111 |
-| garch_normal | 5 | 200 | 0.7950 | 0.8601 | 0.4499 | 0.9550 | 0.7416 | 0.0111 |
+| garch_normal | 5 | 200 | 0.7950 | 0.8601 | 0.4499 | 0.9600 | 0.5020 | 0.0111 |
 | gjr_garch | 5 | 200 | 0.8000 | 1.0000 | 0.1724 | 0.9650 | 0.3047 | 0.0111 |
 | zero_return_fhs | 5 | 200 | 0.8400 | 0.1461 | 0.3464 | 0.9550 | 0.7416 | 0.0115 |
 | ewma | 20 | 200 | 0.8200 | 0.4737 | 0.8047 | 0.9450 | 0.7493 | 0.0200 |
 | garch | 20 | 200 | 0.8250 | 0.3689 | 0.6837 | 0.9600 | 0.5020 | 0.0197 |
 | garch_normal | 20 | 200 | 0.8250 | 0.3689 | 0.6837 | 0.9600 | 0.5020 | 0.0197 |
-| gjr_garch | 20 | 200 | 0.8150 | 0.5923 | 0.6052 | 0.9600 | 0.5020 | 0.0196 |
+| gjr_garch | 20 | 200 | 0.8150 | 0.5923 | 0.6052 | 0.9700 | 0.1622 | 0.0196 |
 | zero_return_fhs | 20 | 200 | 0.8650 | 0.0160 | 0.0625 | 0.9650 | 0.3047 | 0.0206 |
 
 ## Value at risk and expected shortfall
@@ -74,10 +76,10 @@ Losses are fractions of the position, so 0.05 is a 5% loss. `var_mean_loss` is t
 | garch_normal | 1 | 0.9750 | 0.0234 | 0.0268 | 4 | 5.0000 | 0.6391 | 4 | not tested | not tested |
 | gjr_garch | 1 | 0.9750 | 0.0228 | 0.0265 | 4 | 5.0000 | 0.6391 | 4 | not tested | not tested |
 | zero_return_fhs | 1 | 0.9750 | 0.0305 | 0.0367 | 3 | 5.0000 | 0.3283 | 3 | not tested | not tested |
-| ewma | 1 | 0.9950 | 0.0358 | 0.0405 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
-| garch | 1 | 0.9950 | 0.0321 | 0.0379 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+| ewma | 1 | 0.9950 | 0.0359 | 0.0405 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+| garch | 1 | 0.9950 | 0.0323 | 0.0379 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
 | garch_normal | 1 | 0.9950 | 0.0324 | 0.0382 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
-| gjr_garch | 1 | 0.9950 | 0.0303 | 0.0376 | 3 | 1.0000 | 0.1061 | 3 | not tested | not tested |
+| gjr_garch | 1 | 0.9950 | 0.0308 | 0.0376 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
 | zero_return_fhs | 1 | 0.9950 | 0.0435 | 0.0597 | 3 | 1.0000 | 0.1061 | 3 | not tested | not tested |
 | ewma | 5 | 0.9500 | 0.0402 | 0.0480 | 12 | 10.0000 | 0.5287 | 12 | -0.0058 | yes |
 | garch | 5 | 0.9500 | 0.0387 | 0.0477 | 13 | 10.0000 | 0.3512 | 13 | -0.0031 | yes |
@@ -90,8 +92,8 @@ Losses are fractions of the position, so 0.05 is a 5% loss. `var_mean_loss` is t
 | gjr_garch | 5 | 0.9750 | 0.0555 | 0.0617 | 3 | 5.0000 | 0.3283 | 3 | not tested | not tested |
 | zero_return_fhs | 5 | 0.9750 | 0.0584 | 0.0711 | 5 | 5.0000 | 1.0000 | 5 | not tested | not tested |
 | ewma | 5 | 0.9950 | 0.0712 | 0.0798 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
-| garch | 5 | 0.9950 | 0.0675 | 0.0789 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
-| garch_normal | 5 | 0.9950 | 0.0684 | 0.0791 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+| garch | 5 | 0.9950 | 0.0677 | 0.0789 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+| garch_normal | 5 | 0.9950 | 0.0688 | 0.0791 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
 | gjr_garch | 5 | 0.9950 | 0.0732 | 0.0885 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
 | zero_return_fhs | 5 | 0.9950 | 0.0709 | 0.0981 | 3 | 1.0000 | 0.1061 | 3 | not tested | not tested |
 | ewma | 20 | 0.9500 | 0.0710 | 0.0927 | 13 | 10.0000 | 0.3512 | 13 | -0.0077 | yes |
@@ -104,11 +106,36 @@ Losses are fractions of the position, so 0.05 is a 5% loss. `var_mean_loss` is t
 | garch_normal | 20 | 0.9750 | 0.0795 | 0.1122 | 7 | 5.0000 | 0.3925 | 7 | not tested | not tested |
 | gjr_garch | 20 | 0.9750 | 0.0858 | 0.1338 | 2 | 5.0000 | 0.1228 | 2 | not tested | not tested |
 | zero_return_fhs | 20 | 0.9750 | 0.0896 | 0.1238 | 4 | 5.0000 | 0.6391 | 4 | not tested | not tested |
-| ewma | 20 | 0.9950 | 0.1559 | 0.1538 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
-| garch | 20 | 0.9950 | 0.1491 | 0.1582 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
-| garch_normal | 20 | 0.9950 | 0.1480 | 0.1578 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+| ewma | 20 | 0.9950 | 0.1561 | 0.1538 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+| garch | 20 | 0.9950 | 0.1495 | 0.1582 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+| garch_normal | 20 | 0.9950 | 0.1487 | 0.1578 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
 | gjr_garch | 20 | 0.9950 | 0.1720 | 0.1986 | 1 | 1.0000 | 1.0000 | 1 | not tested | not tested |
 | zero_return_fhs | 20 | 0.9950 | 0.1580 | 0.1579 | 2 | 1.0000 | 0.3779 | 2 | not tested | not tested |
+
+## Probability of a move beyond a threshold
+
+`gjr_garch`, expanding window. `latest` is P(beyond the threshold) at the most recent origin, the one the fan chart is drawn from. `p_mean` is the average answered probability over test origins and `realised` the frequency on the same origins, so a calibrated model has the two close. A loss threshold is P(loss > L); a gain threshold is P(gain > G). The complement is the probability of staying inside it.
+
+These are interpolations between the 10 stored quantiles, not simulated frequencies: against a direct count of the same paths the error averages 0.0007 in the tails and reaches 0.019 in the centre (docs/threshold_probabilities.md). Beyond the outermost stored quantile the grid gives only a bound, printed as one.
+
+Latest origin 2026-08-27.
+
+| h | threshold | latest | p_mean | realised | answered | outside | outside_hits |
+|---|---|---|---|---|---|---|---|
+| 1 | gain 5% | < 0.005 | 0.0293 | 0.0000 | 18 of 200 | 182 | 0 |
+| 1 | loss 2% | < 0.005 | 0.0542 | 0.0640 | 125 of 200 | 75 | 1 |
+| 1 | loss 5% | < 0.005 | 0.0224 | 0.0357 | 28 of 200 | 172 | 0 |
+| 1 | loss 10% | < 0.005 | 0.0289 | 0.0000 | 3 of 200 | 197 | 0 |
+| 5 | gain 5% | < 0.005 | 0.0557 | 0.0400 | 100 of 200 | 100 | 0 |
+| 5 | loss 2% | 0.1383 | 0.1421 | 0.1350 | 200 of 200 | 0 | 0 |
+| 5 | loss 5% | < 0.005 | 0.0441 | 0.0292 | 137 of 200 | 63 | 1 |
+| 5 | loss 10% | < 0.005 | 0.0261 | 0.0000 | 34 of 200 | 166 | 0 |
+| 20 | gain 5% | 0.0623 | 0.1336 | 0.1830 | 153 of 200 | 47 | 1 |
+| 20 | loss 2% | 0.2156 | 0.2336 | 0.1500 | 200 of 200 | 0 | 0 |
+| 20 | loss 5% | 0.0577 | 0.0867 | 0.0700 | 200 of 200 | 0 | 0 |
+| 20 | loss 10% | 0.0067 | 0.0305 | 0.0072 | 138 of 200 | 62 | 0 |
+
+`outside` counts test origins where the threshold lay beyond the grid; `outside_hits` is how many of those on the rare side, where the grid said less than 0.5%, crossed the threshold anyway. `p_mean` prints `not tested` when no origin could be answered.
 
 ## The distribution from the latest origin
 
