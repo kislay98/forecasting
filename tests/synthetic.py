@@ -8,6 +8,7 @@ through validate. Same seed, same series, on every platform (numpy PCG64).
 | local_linear_trend              | damped ETS beats naive at medium horizons             |
 | seasonal_ar1                    | only seasonal models beat seasonal naive              |
 | trend_reversal_variance_jump    | coverage drops after the break (robustness, Phase 4)  |
+| garch11_prices                  | the positive control for the calibration harness (A12)|
 """
 
 from __future__ import annotations
@@ -112,3 +113,43 @@ def gbm_prices(n: int = 2000, mu: float = 0.0003, sigma: float = 0.01, seed: int
     """Positive index-like prices for trading_days tests: exp of a random walk in logs."""
     rng = np.random.default_rng(seed)
     return 10_000.0 * np.exp(np.cumsum(rng.normal(mu, sigma, n)))
+
+
+def garch11_returns(
+    n: int = 8000,
+    omega: float = 1.6e-6,
+    alpha: float = 0.09,
+    beta: float = 0.90,
+    seed: int = 0,
+    burn_in: int = 2000,
+) -> np.ndarray:
+    """Zero-mean GARCH(1,1) returns with Normal innovations, r_t = sigma_t z_t.
+
+    sigma^2_t = omega + alpha r^2_{t-1} + beta sigma^2_{t-1}, started at the
+    unconditional variance and burnt in so the returned slice does not depend on that
+    start. The defaults give an unconditional daily SD of 1.26%, about 20% annualised,
+    with persistence 0.99: Nifty-like, and clustered enough that a flat variance model
+    is visibly wrong rather than marginally wrong.
+
+    This is the DGP for the calibration positive control (A12). Its point is that the
+    correct answer is known in advance: garch_normal is the correctly specified model
+    here, so a harness that cannot pass it is broken, and zero_return_fhs is wrong in
+    one specific way (no conditional variance), so a harness that cannot catch it is
+    not testing anything.
+    """
+    if alpha + beta >= 1:
+        raise ValueError("alpha + beta must be below 1 for a stationary process")
+    rng = np.random.default_rng(seed)
+    total = n + burn_in
+    z = rng.standard_normal(total)
+    var = omega / (1.0 - alpha - beta)
+    r = np.empty(total)
+    for t in range(total):
+        r[t] = np.sqrt(var) * z[t]
+        var = omega + alpha * r[t] ** 2 + beta * var
+    return r[burn_in:]
+
+
+def garch11_prices(n: int = 8000, seed: int = 0, **kwargs) -> np.ndarray:
+    """Index-like prices whose log returns are GARCH(1,1): the A12 control series."""
+    return 10_000.0 * np.exp(np.cumsum(garch11_returns(n=n, seed=seed, **kwargs)))

@@ -52,6 +52,8 @@ def backtest_synthetic(
     decision_horizons=(1, 6, 12),
     window: str = "expanding",
     seed: int = 20260922,
+    n_paths: int | None = None,
+    levels: tuple[float, ...] | None = None,
     **labels,
 ) -> SyntheticRun:
     raw = {
@@ -65,7 +67,12 @@ def backtest_synthetic(
         "models": list(models),
         **labels,
     }
-    cfg = parse_config({"seed": seed, "series": [raw]})
+    top: dict = {"seed": seed, "series": [raw]}
+    if n_paths is not None:
+        top["n_paths"] = n_paths
+    if levels is not None:
+        top["levels"] = list(levels)
+    cfg = parse_config(top)
     scfg = cfg.series[0]
     [(series, report)] = validate(to_frame(y, freq, unique_id=uid), scfg)
     store, plan = run_backtest(series, scfg, cfg, "synthetic")

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from tests.synthetic import (
+    garch11_prices,
+    garch11_returns,
     gbm_prices,
     local_linear_trend,
     random_walk,
@@ -13,7 +16,7 @@ from tests.synthetic import (
 
 
 def test_same_seed_same_series_different_seed_different_series():
-    for gen in (random_walk, local_linear_trend, seasonal_ar1, gbm_prices):
+    for gen in (random_walk, local_linear_trend, seasonal_ar1, gbm_prices, garch11_prices):
         np.testing.assert_array_equal(gen(seed=7), gen(seed=7))
         assert not np.array_equal(gen(seed=7), gen(seed=8))
     a, ba = trend_reversal_variance_jump(seed=7)
@@ -60,3 +63,40 @@ def test_to_frame_is_canonical():
     tf = to_frame(gbm_prices(n=10), "trading_days", "2024-01-06")  # a Saturday
     assert (tf["ds"].dt.dayofweek < 5).all()
     assert (gbm_prices(n=100) > 0).all()
+
+
+def test_garch11_is_what_the_control_claims_it_is():
+    """The A12 control rests on this DGP, so check it against its own parameters.
+
+    Not a coverage test: these are the properties the control's known answer depends on.
+    If the unconditional variance drifted from omega / (1 - alpha - beta), or the
+    clustering went away, the control would still pass and would be testing nothing.
+    """
+    omega, alpha, beta = 1.6e-6, 0.09, 0.90
+    r = garch11_returns(n=40_000, omega=omega, alpha=alpha, beta=beta, seed=11)
+
+    target_sd = np.sqrt(omega / (1 - alpha - beta))
+    assert abs(r.std() / target_sd - 1) < 0.10, (r.std(), target_sd)
+    assert abs(r.mean()) < 0.1 * r.std()
+
+    # Clustering: squared returns are autocorrelated, plain returns are not.
+    def ac1(x):
+        x = x - x.mean()
+        return float(np.corrcoef(x[:-1], x[1:])[0, 1])
+
+    assert ac1(r**2) > 0.10, ac1(r**2)
+    assert abs(ac1(r)) < 0.03, ac1(r)
+
+    # Conditional normality plus clustering leaves unconditional excess kurtosis.
+    z4 = float(np.mean(((r - r.mean()) / r.std()) ** 4))
+    assert z4 > 3.5, z4
+
+    # The burn-in is what makes the slice independent of the variance it started at.
+    assert not np.allclose(
+        garch11_returns(n=200, seed=11, burn_in=0), garch11_returns(n=200, seed=11)[:200]
+    )
+
+
+def test_garch11_rejects_a_non_stationary_parameterisation():
+    with pytest.raises(ValueError, match="stationary"):
+        garch11_returns(n=100, alpha=0.2, beta=0.85)
