@@ -22,9 +22,27 @@ from forecasting.config import RunConfig
 from forecasting.evaluation.conformal import conformalise
 from forecasting.evaluation.phase2 import calibration_table, gate_decision
 from forecasting.evaluation.risk import risk_table, simple_loss
+from forecasting.evaluation.thresholds import (
+    CROSSED,
+    OK,
+    OUTSIDE,
+    grid_columns,
+    summarise,
+    threshold_probabilities,
+)
 from forecasting.gate import Gate
 
 FAN_LEVELS = (0.5, 0.8, 0.95)
+# Loss thresholds for the threshold-probability table, as fractions of the position: a
+# 5% gain, then 2%, 5% and 10% losses. A report argument (`forecast risk --thresholds`),
+# not a registered quantity: nothing is decided from this table.
+DEFAULT_THRESHOLDS = (-0.05, 0.02, 0.05, 0.10)
+# Measured once by scripts/threshold_interpolation_error.py against a direct count of
+# the same 10,000 paths (docs/threshold_probabilities.md). Mean absolute error of the
+# interpolated probability in the tails (p < 0.05 or p > 0.95), and the worst case
+# anywhere, which is in the centre where the grid has no point between 25% and 75%.
+INTERP_ERR_TAIL_MEAN = 0.0007
+INTERP_ERR_MAX = 0.019
 
 
 def _fmt(v: Any, nd: int = 4) -> str:
@@ -92,7 +110,120 @@ def fan_chart(frame: pd.DataFrame, model: str, window: str, out: Path) -> Path |
     return out
 
 
-def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> str:
+def _threshold_label(L: float) -> str:
+    return f"gain {abs(L):.0%}" if L < 0 else f"loss {L:.0%}"
+
+
+def _p_or_bound(row: pd.Series) -> str:
+    if row["state"] == OK:
+        return f"{row['p_beyond']:.4f}"
+    if row["state"] == OUTSIDE:
+        return f"< {row['p_hi']:.3f}" if row["p_lo"] == 0.0 else f"> {row['p_lo']:.3f}"
+    return "not answerable"
+
+
+def threshold_section(
+    frame: pd.DataFrame,
+    levels: tuple[float, ...],
+    thresholds,
+    model: str,
+    window: str,
+    horizons,
+    rearrange: bool = False,
+) -> list[str]:
+    """The threshold-exceedance table (OP-4), for one model, read off the stored grid.
+
+    `rearrange` sorts crossed grids before interpolating. The raw engine grid never
+    crosses; a conformally corrected one can, because each level is corrected on its
+    own, and the section says how many rows that touched.
+    """
+    g = frame[
+        (frame["model"] == model)
+        & (frame["window"] == window)
+        & (frame["status"] == "ok")
+        & frame["h"].isin(list(horizons))
+    ]
+    lines: list[str] = []
+    a = lines.append
+    a("## Probability of a move beyond a threshold")
+    a("")
+    if g.empty:
+        a(f"No rows for `{model}` on the {window} window, so no table.")
+        a("")
+        return lines
+    thresholds = sorted(float(v) for v in thresholds)
+    a(
+        f"`{model}`, {window} window. `latest` is P(beyond the threshold) at the most "
+        f"recent origin, the one the fan chart is drawn from. `p_mean` is the average "
+        f"answered probability over test origins and `realised` the frequency on the "
+        f"same origins, so a calibrated model has the two close. A loss threshold is "
+        f"P(loss > L); a gain threshold is P(gain > G). The complement is the "
+        f"probability of staying inside it."
+    )
+    a("")
+    a(
+        f"These are interpolations between the {len(grid_columns(levels))} stored "
+        f"quantiles, not simulated frequencies: against a direct count of the same "
+        f"paths the error averages {INTERP_ERR_TAIL_MEAN:.4f} in the tails and reaches "
+        f"{INTERP_ERR_MAX:.3f} in the centre (docs/threshold_probabilities.md). Beyond "
+        f"the outermost stored quantile the grid gives only a bound, printed as one."
+    )
+    a("")
+    test_rows = g[(g["origin_role"] == "test") & ~g["y_true_missing"]]
+    q = test_rows[grid_columns(levels)].to_numpy(dtype=float)
+    n_crossed = int((np.diff(q, axis=1) < 0).any(axis=1).sum()) if len(q) else 0
+    if rearrange and n_crossed:
+        a(
+            f"{n_crossed} of {len(test_rows)} test rows have quantiles that cross after "
+            f"the conformal correction, which adjusts each level on its own. They are "
+            f"sorted before interpolating. The published intervals are not changed."
+        )
+        a("")
+    probs = threshold_probabilities(g, levels, thresholds, rearrange=rearrange)
+    summary = summarise(probs, role="test")
+    latest_t = int(g["origin_t"].max())
+    latest = probs[probs["origin_t"] == latest_t].set_index(["h", "loss_threshold"])
+    rows = []
+    for _, r in summary.iterrows():
+        key = (int(r["h"]), float(r["loss_threshold"]))
+        rows.append(
+            {
+                "h": int(r["h"]),
+                "threshold": _threshold_label(float(r["loss_threshold"])),
+                "latest": _p_or_bound(latest.loc[key]) if key in latest.index else "-",
+                "p_mean": r["p_mean"],
+                "realised": r["realised"],
+                "answered": f"{int(r['n_answered'])} of {int(r['n'])}",
+                "outside": int(r["n_outside"]),
+                "outside_hits": int(r["outside_hits"]),
+            }
+        )
+    period = g.loc[g["origin_t"] == latest_t, "origin_period"].iloc[0]
+    a(f"Latest origin {period}.")
+    a("")
+    cols = ["h", "threshold", "latest", "p_mean", "realised", "answered", "outside", "outside_hits"]
+    a(_table(pd.DataFrame(rows), cols))
+    a("")
+    a(
+        "`outside` counts test origins where the threshold lay beyond the grid; "
+        "`outside_hits` is how many of those on the rare side, where the grid said "
+        "less than 0.5%, crossed the threshold anyway. `p_mean` prints `not tested` "
+        "when no origin could be answered."
+    )
+    if not rearrange and (probs["state"] == CROSSED).any():
+        a("")
+        a("Some rows have crossed quantiles and are refused rather than sorted.")
+    a("")
+    return lines
+
+
+def build(
+    run_dir: Path,
+    cfg: RunConfig,
+    gate: Gate | None,
+    gate_why: str,
+    thresholds=DEFAULT_THRESHOLDS,
+) -> str:
     frame = ForecastStore.read(run_dir / "forecasts.parquet").frame()
     manifest = json.loads((run_dir / "manifest.json").read_text())
     scfg = cfg.series[0]
@@ -223,6 +354,16 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
     a("")
 
     model = gate.series[scfg.id].primary_model if gate else "ewma"
+    conformal = gate is not None and gate.phase >= 4
+    lines += threshold_section(
+        frame,
+        cfg.levels,
+        thresholds,
+        model,
+        window,
+        scfg.decision_horizons,
+        rearrange=conformal,
+    )
     fig = fan_chart(frame, model, window, run_dir / "risk" / "fan.png")
     if fig is not None:
         a("## The distribution from the latest origin")
@@ -248,8 +389,14 @@ def build(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> st
     return "\n".join(lines)
 
 
-def write(run_dir: Path, cfg: RunConfig, gate: Gate | None, gate_why: str) -> Path:
-    text = build(run_dir, cfg, gate, gate_why)
+def write(
+    run_dir: Path,
+    cfg: RunConfig,
+    gate: Gate | None,
+    gate_why: str,
+    thresholds=DEFAULT_THRESHOLDS,
+) -> Path:
+    text = build(run_dir, cfg, gate, gate_why, thresholds=thresholds)
     out = run_dir / "risk" / "risk.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text)
