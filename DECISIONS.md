@@ -27,6 +27,7 @@ before any milestone.
 | M7 | Known-answer acceptance (A3 to A9), L3 canary, simulation conformance | Done (23 Sep 2026) |
 | M8 | gate.yaml (P1), real data run, A10 go/no-go: NO-GO on both series, [docs/gate_decision.md](docs/gate_decision.md) | Done (23 Sep 2026) |
 | Phase 2 lite | Conditional variance and calibration for Nifty returns. P2 registered, A11 decision: GO on ewma, [docs/phase2_decision.md](docs/phase2_decision.md) | Done (26 Sep 2026) |
+| Phase 3 lite | Cumulative loss, path simulation, VaR and expected shortfall. P3 registered, decision: NO-GO on gjr_garch (over-covers at h = 20), [docs/phase3_decision.md](docs/phase3_decision.md) | Done (26 Sep 2026) |
 
 ## Scope update (22 Sep 2026)
 
@@ -239,6 +240,18 @@ L3 (random-walk canary) is M7; P1 (gate.yaml pre-registration) is M8.
 | P2-17 | The mechanism was checked rather than inferred from the aggregate. The 80% half-width at h = 1 goes 0.0116 calm, 0.0418 in the crash, 0.0093 after, while Phase 1's moves 1%. Inside Feb-Jun 2020 Phase 1's interval covers 0.579 against a nominal 0.80 | A pass on pooled coverage can hide compensating errors. The sub-period view is what shows the flat interval failing exactly when it matters |
 | P2-18 | `garch` and `garch_normal` fail to fit on the rolling window at the 2020-04-09 origin, hitting persistence 1.0000. Recorded as a limitation, not patched | The expanding window carries the decision so the result is unaffected, and softening the stationarity guard to make a fit succeed at the peak of a crash would be fixing the thermometer |
 | P2-10 | Development runs read dev origins only. P2 is registered from dev numbers, committed, and only then does anything score a test origin | Registering blind would mean guessing thresholds; registering after seeing test numbers would not be pre-registration at all. Dev is the part of the data the study is allowed to learn from, which is what L5 already enforces |
+
+## Phase 3 implementation decisions
+
+| # | Decision | Why |
+|---|---|---|
+| P3-1 | The target becomes `cumulative_returns`: the truth at h is log(p_t+h / p_t), the whole move from the origin. Models still only step one period forward and the engine accumulates, the same way it is the only thing that slices | A holding-period loss is what VaR and ES are defined on. A one-day ES scaled by sqrt(20) is not a 20-day ES when volatility clusters, which the simulator measures directly: constant variance reproduces sigma sqrt(h) exactly, the conditional models come out 5 to 7% wider with positive kurtosis |
+| P3-2 | `origin_step` rises from 5 to 20 so every decision horizon is non-overlapping and h = 20 becomes testable for independence. The price is 200 test origins rather than 400 | With a cumulative target, origins closer together than h share days and their exceedances are mechanically dependent. Christoffersen reads the sequence and cannot be repaired by an effective sample (P2-4) |
+| P3-3 | Expected shortfall is computed in the engine from the simulated paths and stored as `es_<tag>`. Two test fixtures were updated rather than making the column optional | A ten-point quantile grid says nothing about the mean beyond its lowest point, and that mean is the entire content of ES. It cannot be recovered after the paths are discarded |
+| P3-4 | The GARCH fit is pinned to one BLAS thread. Before this, the same config gave different forecasts at different `n_jobs` | Diagnosed, not guessed: ewma and zero_return_fhs were byte identical across settings, so seeding, dispatch and simulation were all fine; only the optimiser-fitted models drifted, by up to 9e-4, with fits flipping across the stationarity boundary. Threaded BLAS changes the reduction order and joblib gives workers a different thread count than an in-process run. "Reproducible" had quietly meant "at the same n_jobs", and A1 could not catch it because it re-runs a config with the settings it came with |
+| P3-5 | The ES backtest returns None, rendered "not tested", when there are fewer than ten breaches, instead of reporting that the interval covers zero | Returning a pass for an untested row turned "there were three breaches" into a clean bill of health. At 200 origins most tail rows are in that state, so the distinction is the difference between an honest table and a reassuring one |
+| P3-6 | The registered decision is NO-GO on one check: 80% coverage at h = 20 is 0.865 against [0.75, 0.85]. Kupiec on the same cell returns 0.016 and passes the corrected 0.0043, so had the gate rested on significance alone this would have been a GO | The bands were registered precisely because 200 origins cannot power the tests. The design anticipated that the bands would carry the decision, and they did |
+| P3-7 | Both registered predictions are recorded in the write-up, including the one that was wrong. Dev said conditioning would stop paying by h = 20; on test it won at every horizon (CRPS 0.911 of flat at h = 20). Dev was misleading because it is the most volatile window in the data, where a flat variance is closest to right | A pre-registration quoted only when it was right is decoration. The over-coverage prediction was correct and the sharpness one was not, and both are evidence |
 
 ## Notes for Phase 2
 
