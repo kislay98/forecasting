@@ -133,8 +133,8 @@ def gate_decision(
     gate: Gate, scfg: SeriesConfig, table: pd.DataFrame, reference: str = "zero_return"
 ) -> P2Decision:
     """Apply the registered P2 rules. All four conditions must hold for a go."""
-    if gate.phase != 2:
-        raise ValueError("gate_decision is for a phase 2 gate")
+    if gate.phase < 2:
+        raise ValueError("gate_decision is for a calibration gate (phase 2 or later)")
     g = gate.series[scfg.id]
     model = g.primary_model
     th = gate.thresholds

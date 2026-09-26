@@ -1,0 +1,38 @@
+# Phase 3 lite (Nifty 50). The object changes from "the return on day t+h" to "the
+# whole move from t to t+h", because that is what a holding-period loss is, and it is
+# what VaR and expected shortfall are defined on.
+#
+# Pre-registered with configs/phase3/gate.yaml (P3): change either only with a new
+# gate commit. Phase 2's registered artefacts are untouched by this config.
+seed: 20260926
+n_jobs: 4                             # parallel folds; not part of the run_id
+n_paths: 10000                        # simulated paths per fold; IS part of the run_id
+levels: [0.5, 0.8, 0.9, 0.95, 0.99]   # ten quantiles per row for the calibration tests
+series:
+  - id: nifty50
+    source: csv:../../data/nifty50.csv  # NSE price index, weekend sessions dropped (M8-5)
+    columns: {date: Date, value: Close}
+    date_format: "%d %b %Y"
+    start: 1996-01-01                   # as registered for Phase 1 (M8-6)
+    freq: trading_days
+    season: none
+    target: cumulative_returns          # log(p_t+h / p_t), not the single day at t+h
+    H: 20
+    decision_horizons: [1, 5, 20]       # day, week, month of trading days
+    origin_step: 20                     # see below
+    n_dev_origins: 100
+    n_test_origins: 200                 # 4000 trading days, about 16 years of test period
+    models:
+      - zero_return_fhs                 # flat variance, iid draws: the comparator
+      - ewma                            # Phase 2's winner
+      - garch_normal
+      - garch
+      - gjr_garch
+
+# Why origin_step is 20 here and was 5 in Phase 2. With a cumulative target, the h-step
+# windows of two origins closer together than h share days, so their exceedances are
+# mechanically dependent. Christoffersen reads the hit sequence itself and cannot be
+# repaired by an effective sample the way Kupiec can (P2-4). Step 20 makes every
+# decision horizon non-overlapping, so h = 20, the horizon a holding-period loss
+# actually cares about, becomes testable for the first time. The price is 200 test
+# origins instead of 400, which costs power at the 95% level.

@@ -1,0 +1,80 @@
+# Pre-registration for the Phase 3 lite gate (P3), committed before the first
+# `forecast run configs/phase3/phase3.yaml` that scores test origins.
+#
+# The question: is the distribution of the h-day cumulative loss calibrated well enough
+# to publish VaR and expected shortfall from it, and does conditioning on current
+# volatility earn its place over a flat variance at these horizons?
+#
+# The second half of that question is why crps_ratio_below is measured against
+# zero_return_fhs (flat variance, empirical tails, iid draws) rather than against a
+# Phase 1 model. If the conditional model cannot beat a flat one on a proper score,
+# the honest answer is to ship the flat one.
+#
+# The decision, on test origins of the expanding window, for the primary model only.
+# All four conditions must hold at h = 1, 5 and 20:
+#   1. coverage      inside coverage_80 and coverage_95
+#   2. Kupiec        not rejected at per_test_alpha
+#   3. independence  Christoffersen not rejected at per_test_alpha
+#   4. sharpness     CRPS below crps_ratio_below times zero_return_fhs's
+#
+# per_test_alpha is Sidak-corrected downwards for a conjunction, as in P2: twelve tests
+# (3 horizons x 2 levels x 2 tests), 1 - 0.95^(1/12) = 0.0043, for a 5% family-wise
+# false-failure rate. The P2 reading rule carries over: a Kupiec rejection alongside an
+# independence rejection is read as clustering rather than a wrong average rate (P2-3),
+# which changes the write-up and never the verdict.
+#
+# origin_step is 20 so that every decision horizon is non-overlapping and h = 20 is
+# testable for the first time. The price is 200 test origins, which at the 95% level
+# leaves 10 expected misses: the statistical tests there are weak, and the coverage
+# bands rather than the p-values are expected to do the work.
+phase: 3
+registered: 2026-09-26
+alpha: 0.05
+primary_window: expanding
+series:
+  nifty50:
+    decision_horizons: [1, 5, 20]
+    models:
+      - zero_return_fhs           # flat variance, iid draws: the comparator
+      - ewma                      # Phase 2's winner on the single-day object
+      - garch_normal
+      - garch
+      - gjr_garch
+    primary_model: gjr_garch
+    chosen_by: >
+      Lowest mean CRPS across the three decision horizons on the 100 dev origins of the
+      exploratory run 44bbfef71567c9cf (2002-06-17 to 2010-06-14), relative to
+      zero_return_fhs: gjr_garch 0.9923, garch_normal 0.9929, garch 0.9933,
+      zero_return_fhs 1.0000, ewma 1.0090.
+
+      That ranking is recorded as it stands and it is close to meaningless on its own:
+      the top three are within 0.1% of each other on 100 origins, which is noise. What
+      the dev set says more clearly is that the advantage is concentrated at h = 1
+      (0.968 for gjr_garch) and has gone by h = 20 (1.012, worse than flat). gjr_garch
+      is named because it wins the registered rule, not because dev showed it to be
+      better in any way that would survive a second sample.
+    expectation: >
+      Phase 2 found that conditioning on current volatility was worth a great deal for
+      the next single day. Dev says that result does not carry to a 20-day cumulative
+      loss: by then the conditional variance has reverted most of the way to the
+      unconditional level, and the flat comparator is as good or better. The prediction
+      is therefore that condition 4, CRPS against the flat model, fails at h = 20, and
+      that P3 returns a NO-GO whose meaning is "conditioning does not pay over a month,
+      ship the flat model for that horizon".
+
+      The registered risk runs the opposite way to P2. There, the model was chosen on
+      the calmest window and tested on a volatile one. Here the dev window (2002-2010)
+      realises 27.9% annualised volatility against 22.5% for the full sample and 16.4%
+      in the test window (2010-2026), so a model selected in the most violent stretch
+      faces the calmest. The failure to watch for is over-coverage: intervals carrying
+      too much of the old regime's volatility into a quiet one, which is the same
+      mistake Phase 1's flat interval made and the reason its coverage drifted to 0.97.
+
+      At h = 20 with 200 origins, 10 misses are expected at the 95% level. Nothing
+      there is well powered, and the coverage bands, not the p-values, are what the
+      decision will actually turn on.
+thresholds:
+  coverage_80: [0.75, 0.85]
+  coverage_95: [0.91, 0.98]
+  per_test_alpha: 0.0043          # Sidak, 12 tests, 5% family-wise
+  crps_ratio_below: 1.0           # against zero_return_fhs on the same origins
