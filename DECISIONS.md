@@ -7,6 +7,7 @@ The source of truth is in this repo:
 | Spec: roadmap and Phase 1 implementation specification | [docs/spec.md](docs/spec.md) | [Claude Docs page](https://claude.ai/code/artifact/a0e49b2a-df95-4575-9a3f-11431cdef575) |
 | Research review and design | [docs/research.md](docs/research.md) | [Claude Docs page](https://claude.ai/code/artifact/0c667958-fdfe-4001-a11e-2fba23f66803) |
 | Audit of the finished work against the original research prompt | [docs/original_prompt_audit.md](docs/original_prompt_audit.md) | written 26 Sep 2026 |
+| Session prompts for the three open items, runnable in parallel | [docs/prompts/](docs/prompts/) | written 26 Sep 2026 |
 
 The files are snapshots (spec revision 28, research revision 17, 22 Sep 2026). If the
 Claude Docs pages change, refresh the snapshots in the same commit as the code that
