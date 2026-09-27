@@ -9,7 +9,7 @@ rules were applied as written; nothing in them was changed after seeing test ori
 | Series | Decision | Registered expectation | Held? |
 |---|---|---|---|
 | nifty50 | **NO-GO** | Nothing beats the zero-return forecast on the mean (U5) | Yes |
-| electricity (control) | **NO-GO** under the registered significance rule | Seasonal models beat seasonal naive at every horizon | Yes in relative MAE at every h; not significant after Holm |
+| electricity (control) | **NO-GO** under the registered significance rule | Seasonal models beat seasonal naive at short horizons, ETS and the combination at all 24 | Yes in relative MAE at every h; not significant after Holm |
 
 ## Nifty 50
 
@@ -38,8 +38,13 @@ and 20 trading days, expanding window.
 Monthly output from 1990, 120 test origins at step 1, decision horizons 1, 12 and 24 months,
 expanding window. Every decision horizon was testable (n / h = 120, 10 and 5).
 
-- **The control did its job.** Every seasonal model beats seasonal naive in relative MAE at
-  every one of the 24 horizons (ETS 0.82 to 0.99, the combination 0.81 to 0.97, Theta 0.83 to
+- **The control did its job**, with one correction recorded 27 Sep 2026: not at every
+  horizon. At h = 1 all four seasonal models are 16% to 19% better than seasonal naive
+  (combination 0.811, ETS 0.819, Theta 0.830, SARIMA 0.844). ETS and the combination stay
+  below 1 at all 24 horizons. Theta rises above 1 at h = 5, 7 and 8, and SARIMA at the
+  longest horizons, reaching 1.080 at h = 24. The original wording here claimed every model
+  at every horizon, which the report's own per-horizon table contradicts (ETS 0.82 to 0.99,
+  the combination 0.81 to 0.97, Theta 0.83 to
   1.02 with two horizons above 1), and all four sit in the Model Confidence Set at every h,
   while naive, drift, SES and SMA are excluded except where they coincide with seasonal
   naive at h = 12 and 24. The harness recognises seasonal structure on real data.
@@ -67,7 +72,7 @@ expanding window. Every decision horizon was testable (n / h = 120, 10 and 5).
    Normal intervals from the unconditional variance) is the case for conditional variance.
    No further work on the conditional mean without covariates.
 2. **Electricity.** The registered decision is NO-GO and stands. The evidence also says the
-   models are better than seasonal naive by 10 to 19% at short horizons but that the
+   models are better than seasonal naive by 16% to 19% at h = 1 but that the
    pre-registered design (15-way Holm at three horizons, 120 origins) cannot certify it at
    5%. If the control is used again, register fewer tests (one decision horizon, or one
    pre-named candidate such as the combination) or more origins; do not re-run this design

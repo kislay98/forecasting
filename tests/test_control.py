@@ -7,7 +7,7 @@ calibration too, and the cleanest way to get a known answer is a DGP whose condi
 variance we wrote ourselves.
 
 The series is GARCH(1,1) with Normal innovations (tests.synthetic.garch11_prices),
-unconditional volatility 18% annualised, persistence 0.99. Two models are run on it:
+unconditional volatility 20.1% annualised implied by its parameters, persistence 0.99. Two models are run on it:
 
   garch_normal      correctly specified. GARCH(1,1), Normal innovations, zero mean.
   zero_return_fhs   wrong in one specific way: no conditional variance at all, with

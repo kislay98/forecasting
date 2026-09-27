@@ -39,7 +39,8 @@ the model. This harness is built so that cannot happen quietly:
   the share of "wins" stays at the false-positive rate.
 - The rules for declaring success were written down and committed **before** the real
   test data were scored, and the report refuses to issue a decision if they changed.
-- Two independent runs produced the same 569,176 forecasts byte for byte.
+- Two independent runs produced the same 569,176 forecasts, identical in every value once
+  the run label and the timing column are set aside (both series, not the index alone).
 
 ## What happened next
 

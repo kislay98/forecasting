@@ -69,7 +69,8 @@ Read against what this project decided, the conclusion is specific:
 - **10,000, the registered count, is adequate for the calibration decisions** but only
   because they average over 200 test origins with an independent stream per origin, which
   divides the per-origin noise by roughly the square root of 200. Without that averaging it
-  would not be: P4's width correction at h = 20 was 1.8%, which is smaller than the 2.4%
+  would not be: P4's width correction at h = 20 moves the aggregate width by 1.8% and a
+  typical single origin's by 3.5%, against 2.4%
   per-origin noise on a band edge.
 - **100,000 is what a single origin's expected shortfall needs** to be quotable to within
   about 2%, which is the regime anyone using the fan chart for one date is in.

@@ -79,7 +79,7 @@ matters for sizing and which a VaR alone never tells you.
 
 The expected-shortfall backtest is mostly unusable at this sample size and the report
 says so rather than implying a pass: at 200 origins a 97.5% VaR produces about five
-breaches, and the test declines below ten. Only two rows in the whole table have enough
+breaches, and the test declines below ten. Only five rows of the 45 in the risk table have enough
 breaches to judge, and both cover zero. The honest position is that VaR calibration has
 been tested and ES calibration has not.
 

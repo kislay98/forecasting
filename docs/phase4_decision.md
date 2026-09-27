@@ -66,11 +66,16 @@ observations out of 200 is a decision to state with its margin attached.
 The correction is a single number per origin, level and horizon, added to both bounds.
 Its direction should be a shrink wherever the model was over-covering.
 
-| Horizon | 80% mean width | 95% mean width |
+| Horizon | 80%, mean of per-origin ratios | 95%, mean of per-origin ratios |
 |---|---|---|
 | 1 | 0.975x, shrank on 52% of origins | 1.218x, shrank on 6% |
 | 5 | 1.014x, shrank on 55% | 0.960x, shrank on 69% |
 | 20 | 0.965x, shrank on 74% | 1.123x, shrank on 46% |
+
+Corrected 27 Sep 2026: this column is the mean of the per-origin width ratios, not the ratio
+of the mean widths, which the heading previously implied. The two differ: at h = 20 and the
+80% level the per-origin mean is 0.965x while the aggregate widths move 0.1232 to 0.1211,
+which is 0.982x. Both are recomputed from the store.
 
 At the 80% level the behaviour is coherent: a mild shrink, strongest at h = 20, which is
 where the over-coverage was. At the 95% level it is not. It widens by 22% at h = 1,

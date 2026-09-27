@@ -66,7 +66,13 @@ in the same state on the same cell:
 | 0.0300 | garch |
 | 0.115 | garch_normal |
 
-No model in the registered family removes the clustering at a week on this market. The
+Every model in the family has a lower independence p-value at h = 5 than at h = 1, and three
+of the six fail the corrected threshold. The registered primary is not alone in failing, and
+it is not the worst. What the table does not support is a claim that the family cannot handle
+this market: `garch_normal` sits at 0.115, nowhere near the line, and `gjr_garch` at 0.0093
+and `garch` at 0.0300 both clear 0.0064. (That last sentence replaced an overstatement on
+27 Sep 2026; the original read "no model in the registered family removes the clustering",
+which this page's own table contradicts.) The
 one that comes closest is `garch_normal`, which is the only member whose intervals come
 from a fitted variance with Normal tails rather than resampled residuals.
 
