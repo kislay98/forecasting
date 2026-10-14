@@ -1,115 +1,116 @@
 # forecasting
 
-Can any forecasting model beat a simple guess like "tomorrow will be like today" on real data, once every
-way of cheating with future information has been ruled out?
+A rolling-origin backtesting harness for univariate time series, and a study run on it.
 
-This project answers that question for three series:
+The study started with one question: does any forecasting model beat "tomorrow will be
+like today" on the Nifty 50, once every way of leaking future information into the model
+has been ruled out? None did. So the rest of the study fixed the point forecast at zero
+and asked a narrower question: can a volatility model produce prediction intervals that
+are honest, meaning the actual move lands inside them about as often as the interval
+claims? At one day and one week ahead it can. At one month ahead it needs a calibration
+step, and with that step the result held on the S&P 500 too.
 
-- **Nifty 50** (India's stock index, daily)
-- **S&P 500** (America's, daily): a second market, used to check whether the answers
-  found on the first one hold anywhere else.
-- **US electricity and gas output** (monthly, from FRED): a control with real seasonal
-  structure, included to prove the machinery can see a pattern when there is one.
+Every decision rule was written down and committed before the test data it judged were
+scored. This is research code, not a trading system, and not financial advice.
 
-It is a research study, not a trading system, and not financial advice.
+## Data
 
-## The answer
+| Series | Frequency | Used from | Role |
+|---|---|---|---|
+| Nifty 50 price index (`data/nifty50.csv`) | daily | 1996 | the subject |
+| S&P 500 (`data/sp500.csv`) | daily | 1996 | replication on a second market |
+| US electricity and gas output, FRED series IPG2211A2N | monthly | 1990 | control with a known seasonal pattern |
 
-**Nifty 50: no.** Nothing beats predicting a zero return for tomorrow, at 1, 5 or 20
-trading days ahead. What the data do show is volatility clustering: calm and turbulent
-periods come in runs. That is the one thing worth modelling next.
+## What happened, phase by phase
 
-**Electricity control: the models see the season.** Every seasonal model beats the
-"same month last year" baseline by 10 to 19% at short horizons. Under the strict
-statistical rule we fixed in advance, that gain is just short of significant (the rule
-was applied as written; we did not move it).
+Each phase has a decision document that states the registered rule, the run it was
+applied to, and the result cell by cell. The table gives the short version.
 
-The decision is [here](docs/gate_decision.md), report and figures are
-[here](docs/phase1_report/).
+| Phase | Question | Setup | Result |
+|---|---|---|---|
+| [1](docs/gate_decision.md) | Does any model beat a naive forecast of Nifty returns? | 250 test origins, horizons 1, 5 and 20 trading days. Baselines: naive, drift, moving average, zero return. Candidates: AR, exponential smoothing, ETS, SARIMA, Theta, and their equal-weight combination. | **No.** Nothing beats a zero-return forecast at any horizon, so the predictable horizon is zero. The residuals do show volatility clustering (ARCH-LM rejects at all 250 origins), and that is what the later phases model. |
+| [1, control](docs/gate_decision.md) | Can the harness see a pattern when one exists? | The same design on the electricity series: 120 test origins, horizons 1, 12 and 24 months. | **Yes, but not significant under the registered rule.** Seasonal models beat seasonal naive by 16 to 19% one month ahead. After the multiple-comparison correction the gain misses the significance threshold, so the recorded decision is NO-GO. The rule was applied as written. |
+| [2](docs/phase2_decision.md) | With the point forecast fixed at zero, are one-day and one-week intervals from a volatility model honest? | 400 test origins. EWMA, GARCH(1,1) and GJR-GARCH, with Normal, Student-t or bootstrapped tails. Baseline: empirical quantiles of past returns. EWMA was named as the primary model before the run. | **Yes.** 80% intervals cover 78.7% of actuals at one day and 81.5% at five days; 95% intervals cover 94.0% and 93.8%. Misses are independent of each other. CRPS is 13% better than the flat baseline. 14 of 14 checks pass. |
+| [3](docs/phase3_decision.md) | And a whole month held at once? | The 20-day cumulative return, from 10,000 simulated paths per origin. GJR-GARCH, 200 test origins. | **No.** The 80% interval at 20 days covers 86.5%, outside the registered band of 75 to 85%. 20 of 21 checks pass. The interval is too wide. |
+| [4](docs/phase4_decision.md) | Does a conformal width correction fix that? | Phase 3's forecasts, unchanged, plus a per-level width factor learned from the errors of the previous 60 origins. | **Yes.** Coverage at 20 days goes from 86.5% to 83.0%. 21 of 21 checks pass. The margin is four origins out of 200. |
+| [5a](docs/phase5a_decision.md) | Does Phase 2 hold on the S&P 500? | Same design and model. The rule was committed before the S&P data were in the repo. | **Not quite.** 13 of 14 checks pass. Coverage is right, but misses cluster at the five-day horizon: the independence test gives p = 0.0056 against a corrected threshold of 0.0064. |
+| [5b](docs/phase5b_decision.md) | Does Phase 4 hold on the S&P 500? | Same design and model. | **Yes.** 21 of 21 checks pass. Without the correction, the S&P shows the same over-coverage at 20 days that Nifty showed in Phase 3, so that fault is a property of the method, not of one market. |
+| [6](docs/phase6_decision.md) | The simulation resamples past residuals independently, and they are not independent. Does resampling them in blocks change anything? | Blocks of 10 days. Four arms: two markets, with and without the conformal correction. | **No decision changes.** The block sampler moves the 20-day distribution by about 10%, wider on Nifty and narrower on the S&P, and its CRPS on Nifty at 20 days is 1% worse. Not adopted. |
+| [7](docs/phase7_decision.md) | GARCH parameters enter the simulation as point estimates. Does drawing them per path widen the intervals? | Draws from the fit's asymptotic covariance, same random innovations, both markets. | **No.** On Nifty the 20-day interval width changes by under 0.2%, a tenth of the simulation noise already in it. Not adopted. |
 
-## Why you can trust the "no"
+Taken together: the mean of an index return is not forecastable from its own past, and
+the harness could not be talked into saying otherwise. The variance is forecastable, and
+GJR-GARCH with a conformal width correction gives month-ahead intervals that held on two
+markets. The two refinements tried afterwards did not improve on it.
 
-Most "we beat the market" results come from information leaking from the future into
-the model. This harness is built so that cannot happen quietly:
+Two more things came out of closing the study:
 
-- The engine hands each model only the past. Tests replace every future value with
-  garbage (huge numbers, blanks, shuffles) and check that no forecast changes.
-- Planted cheats are caught by those same tests, so the tests are known to work.
-- 200 simulated random walks (which nothing can forecast) are backtested every night;
-  the share of "wins" stays at the false-positive rate.
-- The rules for declaring success were written down and committed **before** the real
-  test data were scored, and the report refuses to issue a decision if they changed.
-- Two independent runs produced the same 569,176 forecasts, identical in every value once
-  the run label and the timing column are set aside (both series, not the index alone).
+- The risk report now prints the probability of a move beyond a named threshold, read
+  from the stored forecast quantiles. It refuses to answer beyond the outermost stored
+  quantile rather than extrapolate. See [docs/threshold_probabilities.md](docs/threshold_probabilities.md).
+- Reading the whole quantile grid for that work exposed a defect: the conformal
+  correction could make the 99% interval narrower than the 95% one, in about a fifth of
+  corrected rows. It is fixed, one published cell moved, and no decision changed.
 
-## What happened next
+[docs/original_prompt_audit.md](docs/original_prompt_audit.md) checks the finished work
+against the brief the study started from, and lists what was deliberately not done:
+monitoring, a machine-learning model, Bayesian methods and regime switching, each with
+the condition that would make it worth doing.
 
-Direction turned out to be a dead end, so the later rounds ask a different question: not
-where the price will go, but how far it might move, and whether that range can be
-trusted. A range is trustworthy if the real move lands inside it about as often as the
-range claims, and if the misses are scattered rather than bunched into bad weeks.
+## How leakage is ruled out
 
-Each round wrote its rule down and committed it before scoring any test data, so every
-answer below is a rule applied, not a result found.
+Most "we beat the market" results come from information leaking from the future into the
+model. The harness is built so that cannot happen quietly.
 
-| Round | Question | Answer |
-|---|---|---|
-| [1](docs/gate_decision.md) | Can any model beat "tomorrow will be like today"? | **No** on the Nifty. The control sees its season. |
-| [2](docs/phase2_decision.md) | Can a range that tracks current volatility be trusted a day and a week out? | **Yes.** A flat range built from all of history cannot. |
-| [3](docs/phase3_decision.md) | And over a whole month held at once? | **No.** The range came out too wide: the move landed inside it 86.5% of the time where 80% was wanted. |
-| [4](docs/phase4_decision.md) | Does correcting the width by however much recent forecasts were off fix that? | **Yes**, and by four of the 200 test dates, which is as thin as a pass gets. |
-| [5a](docs/phase5a_decision.md) | Does round 2 hold on the S&P 500? | **No.** The average is right and the misses bunch together at a week, which no model in the set removes. |
-| [5b](docs/phase5b_decision.md) | Does round 4 hold on the S&P 500? | **Yes**, and the fault it was built to fix turned up there on its own, at the same horizon. |
-| [6](docs/phase6_decision.md) | The ranges are built by reshuffling past surprises one at a time, but surprises come in runs. Does keeping the runs together change anything? | **No decision changes.** It moves a month-ahead range by about 10%, wider on the Nifty and narrower on the S&P, and scored slightly worse, so the simpler method stays. |
-| [7](docs/phase7_decision.md) | The model's own fitted numbers are uncertain. Do the ranges widen once that is allowed for? | **No.** Under 0.2% of the width on the Nifty, a tenth of the simulation noise already in them. |
+- The engine hands each model only the data up to the forecast origin. Tests replace
+  every future value with garbage (huge numbers, blanks, shuffled order) and check that no
+  forecast changes.
+- Models with deliberately planted leaks are run through the same tests, to show the
+  tests catch them.
+- 200 simulated random walks, which nothing can forecast, are backtested every night.
+  The share of "wins" stays at the false-positive rate.
+- Every choice that could be tuned, such as which baseline to compare against, is made on
+  a development slice of origins that comes before the test slice.
+- The success rule for each phase is committed and hashed before the test origins are
+  scored. The report refuses to issue a decision if the rule changed afterwards.
+- Runs are reproducible on one machine: two independent runs of Phase 1 produced the
+  same 569,176 forecasts, identical in every value once the run label and timing column
+  are set aside.
 
-Rounds 6 and 7 close the two gaps the [audit against the original
-brief](docs/original_prompt_audit.md) had left open. Neither changed a published
-answer, and both were registered the same way. The risk report can also say how likely
-a move beyond a named threshold is, read off the stored ranges rather than recomputed,
-and it refuses rather than guesses beyond the range it stored
-([docs/threshold_probabilities.md](docs/threshold_probabilities.md)).
+## Run it
 
-Round 5 is the one worth reading. It says the day-ahead winner picked in round 2 was a
-coin toss between two close candidates, and it says the month-ahead problem found in
-round 3 is a real property of stock indices rather than a quirk of one market.
-
-There is also a control for the range work, the same idea as the electricity series: a
-made-up price series whose volatility we chose ourselves, so the right answer is known
-before the run. The model that generated it must pass, and a model missing the
-volatility part must be caught. Both hold, and the control also shows which of the
-checks is doing the catching: the one that looks at whether misses bunch together. The
-others barely notice.
-
-## Try it in five minutes
-
-Needs [uv](https://docs.astral.sh/uv/) (it installs Python for you).
+Needs [uv](https://docs.astral.sh/uv/), which installs Python for you.
 
 ```bash
 uv sync
-uv run forecast run examples/config.yaml   # backtest two synthetic series, write a report
+uv run forecast run examples/config.yaml      # two synthetic series, writes a report
 ```
 
-Open `examples/runs/<run_id>/report/report.md`: one verdict per research question, the
-tables behind each, and three plots per series. To reproduce the real result:
+Open `examples/runs/<run_id>/report/report.md` for one verdict per research question, the
+tables behind it, and three plots per series.
+
+To reproduce the study, run a phase config. The data are in the repo.
 
 ```bash
-uv run forecast run configs/phase1.yaml    # about 30 CPU minutes; data are in the repo
+uv run forecast run configs/phase1.yaml       # about 30 CPU minutes
+uv run forecast run configs/phase4/phase4.yaml
+uv run forecast risk <run dir> --thresholds -0.05 0.02 0.05 0.10   # VaR, expected shortfall, fan chart, threshold probabilities
 ```
 
-## How it works
+Later phases live under `configs/phase<N>/`, each with its config and the gate it was
+scored against.
+
+## How a run works
 
 Each series is replayed through time. At every origin the models see only the data up
 to that point, refit from scratch, and forecast 1 to H steps ahead. Every forecast is
-stored, then scored against simple baselines with tests that account for overlapping
-horizons and for the number of comparisons made. Choices such as which baseline to
-compare against are made on a separate "development" slice of origins, never on the
-test slice.
+stored, then scored against the baselines with tests that account for overlapping
+horizons and for the number of comparisons made.
 
-## The method
+## The statistics
 
-Each step below is one idea, the equation the code implements, and where the spec or
-research defines it (see [docs/spec.md](docs/spec.md), "Metrics and statistics").
+One paragraph per idea, with the equation the code implements. The definitions are in
+[docs/spec.md](docs/spec.md) under "Metrics and statistics".
 
 **Returns, not prices.** Prices are close to a random walk, so the Nifty is modelled on
 log returns and price forecasts are derived from them:
@@ -200,4 +201,3 @@ NO-GO.
 | See every decision made while building, in order | [DECISIONS.md](DECISIONS.md) |
 | Check the finished work against the brief it started from | [docs/original_prompt_audit.md](docs/original_prompt_audit.md) |
 | Read the original plan and the research behind it | [docs/spec.md](docs/spec.md), [docs/research.md](docs/research.md) |
-  
