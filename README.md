@@ -60,6 +60,15 @@ answer below is a rule applied, not a result found.
 | [4](docs/phase4_decision.md) | Does correcting the width by however much recent forecasts were off fix that? | **Yes**, and by four of the 200 test dates, which is as thin as a pass gets. |
 | [5a](docs/phase5a_decision.md) | Does round 2 hold on the S&P 500? | **No.** The average is right and the misses bunch together at a week, which no model in the set removes. |
 | [5b](docs/phase5b_decision.md) | Does round 4 hold on the S&P 500? | **Yes**, and the fault it was built to fix turned up there on its own, at the same horizon. |
+| [6](docs/phase6_decision.md) | The ranges are built by reshuffling past surprises one at a time, but surprises come in runs. Does keeping the runs together change anything? | **No decision changes.** It moves a month-ahead range by about 10%, wider on the Nifty and narrower on the S&P, and scored slightly worse, so the simpler method stays. |
+| [7](docs/phase7_decision.md) | The model's own fitted numbers are uncertain. Do the ranges widen once that is allowed for? | **No.** Under 0.2% of the width on the Nifty, a tenth of the simulation noise already in them. |
+
+Rounds 6 and 7 close the two gaps the [audit against the original
+brief](docs/original_prompt_audit.md) had left open. Neither changed a published
+answer, and both were registered the same way. The risk report can also say how likely
+a move beyond a named threshold is, read off the stored ranges rather than recomputed,
+and it refuses rather than guesses beyond the range it stored
+([docs/threshold_probabilities.md](docs/threshold_probabilities.md)).
 
 Round 5 is the one worth reading. It says the day-ahead winner picked in round 2 was a
 coin toss between two close candidates, and it says the month-ahead problem found in
@@ -189,5 +198,6 @@ NO-GO.
 |---|---|
 | Run your own series, understand every option and test | [docs/reference.md](docs/reference.md) |
 | See every decision made while building, in order | [DECISIONS.md](DECISIONS.md) |
+| Check the finished work against the brief it started from | [docs/original_prompt_audit.md](docs/original_prompt_audit.md) |
 | Read the original plan and the research behind it | [docs/spec.md](docs/spec.md), [docs/research.md](docs/research.md) |
   

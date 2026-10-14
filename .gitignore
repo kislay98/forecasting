@@ -14,3 +14,4 @@ Claude outputs/
 dist/
 build/
 .DS_Store
+.idea/
